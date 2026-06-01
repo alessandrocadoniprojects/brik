@@ -26,6 +26,7 @@ import { buildCriteria } from '../intake/index.js';
 import { repairLoop } from '../orchestrator/repair.js';
 import { applyChange, type EditConflict } from '../orchestrator/edit.js';
 import { summarizeSpec, type PreviewSummary } from '../orchestrator/preview.js';
+import type { SecurityScanner, ScanReport } from '../security/scanner.js';
 import type { SessionStore } from './store.js';
 import type { ProjectFile, ProjectState, HistoryEntry } from './types.js';
 
@@ -252,4 +253,35 @@ export async function revertProject(store: SessionStore, id: string): Promise<Re
   const saved = await store.save({ ...f.value, state, history });
   if (!saved.ok) return err(saved.error);
   return ok(state);
+}
+
+/**
+ * Pubblicazione: richiede lo stato 'approved' e supera il gate di sicurezza.
+ * Se il gate blocca, NON pubblica e restituisce i findings. Il deploy verso un
+ * sottodominio è Fase 3: qui si marca 'published' e l'artefatto è la pagina.
+ */
+export async function publishProject(args: {
+  readonly store: SessionStore;
+  readonly id: string;
+  readonly scanner: SecurityScanner;
+}): Promise<Result<{ published: boolean; state: ProjectState; report: ScanReport }>> {
+  const f = await args.store.load(args.id);
+  if (!f.ok) return err(f.error);
+  if (!f.value) return err(notFound(args.id));
+  const cur = f.value.state;
+
+  if (cur.status !== 'approved') {
+    return err(appError('NOT_APPROVED', 'Approva il progetto prima di pubblicare (stato attuale: ' + cur.status + ').', { retryable: false }));
+  }
+
+  const report = args.scanner.scan(cur.html);
+  if (report.blocked) {
+    // gate fallito: non si pubblica, lo stato resta invariato
+    return ok({ published: false, state: cur, report });
+  }
+
+  const state: ProjectState = { ...cur, status: 'published', updatedAt: now(), publishedAt: now() };
+  const saved = await args.store.save({ ...f.value, state });
+  if (!saved.ok) return err(saved.error);
+  return ok({ published: true, state, report });
 }

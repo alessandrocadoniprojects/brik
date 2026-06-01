@@ -25,6 +25,7 @@ import { makeAnthropicLLM, makeAnthropicCodeGenerator } from '../src/adapters/in
 import { makeAnthropicClassifier } from '../src/intake/index.js';
 import { makePlaywrightQaRunner } from '../src/qa/playwrightRunner.js';
 import { makeFileSessionStore } from '../src/project/store.js';
+import { makeBasicSecurityScanner } from '../src/security/scanner.js';
 import {
   createProject,
   getProject,
@@ -32,6 +33,7 @@ import {
   editProject,
   updateProjectRequirements,
   revertProject,
+  publishProject,
   type QaFor,
 } from '../src/project/session.js';
 import { summarizeSpec } from '../src/orchestrator/preview.js';
@@ -110,6 +112,44 @@ if (cmd === 'revert') {
   console.log('Ripristinata la versione precedente.');
   printState(r.value);
   console.log('Apri: demo/projects/' + id + '.html');
+  process.exit(0);
+}
+
+if (cmd === 'scan') {
+  const r = await getProject(store, id);
+  if (!r.ok) {
+    console.error(r.error.message);
+    process.exit(1);
+  }
+  if (!r.value) {
+    console.log('Nessun progetto "' + id + '".');
+    process.exit(0);
+  }
+  const rep = makeBasicSecurityScanner().scan(r.value.html);
+  if (rep.findings.length === 0) console.log('Scan: nessun problema.');
+  else {
+    console.log('Scan (' + (rep.blocked ? 'BLOCCA la pubblicazione' : 'solo avvisi') + '):');
+    for (const f of rep.findings) console.log('  - [' + f.severity + '] ' + f.code + ' x' + f.count + ' — ' + f.message);
+  }
+  console.log('Pubblicabile: ' + (rep.blocked ? 'no' : 'si'));
+  process.exit(0);
+}
+
+if (cmd === 'publish') {
+  const r = await publishProject({ store, id, scanner: makeBasicSecurityScanner() });
+  if (!r.ok) {
+    console.error(r.error.message);
+    process.exit(1);
+  }
+  if (!r.value.published) {
+    console.log('PUBBLICAZIONE BLOCCATA dal gate di sicurezza:');
+    for (const f of r.value.report.findings) console.log('  - [' + f.severity + '] ' + f.code + ' x' + f.count + ' — ' + f.message);
+    process.exit(0);
+  }
+  mkdirSync(projectsDir, { recursive: true });
+  writeFileSync(fileURLToPath(new URL('./projects/' + id + '.published.html', import.meta.url)), r.value.state.html);
+  console.log('PUBBLICATO (versione ' + r.value.state.version + ', ' + r.value.state.publishedAt + ').');
+  console.log('Artefatto: demo/projects/' + id + '.published.html');
   process.exit(0);
 }
 

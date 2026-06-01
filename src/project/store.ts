@@ -32,7 +32,7 @@ function validate(parsed: unknown): parsed is ProjectFile {
   if (!st || typeof st !== 'object') return false;
   if (typeof st.id !== 'string' || typeof st.html !== 'string') return false;
   if (typeof st.version !== 'number' || typeof st.updatedAt !== 'string') return false;
-  if (st.status !== 'preview' && st.status !== 'approved') return false;
+  if (st.status !== 'preview' && st.status !== 'approved' && st.status !== 'published') return false;
   if (!isStringArray(st.statements)) return false;
   const spec = st.spec as Record<string, unknown> | undefined;
   if (!spec || typeof spec !== 'object' || !Array.isArray(spec.criteria)) return false;

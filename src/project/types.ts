@@ -1,7 +1,7 @@
 /** Tipi del progetto persistito (Fase 2). */
 import type { ProjectSpec, AcceptanceCriterion } from '@core';
 
-export type ProjectStatus = 'preview' | 'approved';
+export type ProjectStatus = 'preview' | 'approved' | 'published';
 
 export interface ProjectState {
   readonly id: string;
@@ -15,6 +15,9 @@ export interface ProjectState {
   /** Cresce a ogni modifica/aggiornamento accettato. */
   readonly version: number;
   readonly updatedAt: string;
+  /** Valorizzati alla pubblicazione. */
+  readonly publishedAt?: string;
+  readonly url?: string;
 }
 
 /** Snapshot per l'undo. */
