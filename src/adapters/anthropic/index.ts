@@ -32,12 +32,12 @@ export interface AnthropicConfig {
 }
 
 /** Ritenta un'operazione che ritorna Result finché l'errore è retryable. */
-async function retryResult<T>(op: () => Promise<Result<T>>, retries = 2, baseMs = 400): Promise<Result<T>> {
+async function retryResult<T>(op: () => Promise<Result<T>>, retries = 4, baseMs = 500): Promise<Result<T>> {
   let last: Result<T> | undefined;
   for (let i = 0; i <= retries; i++) {
     last = await op();
     if (last.ok || !last.error.retryable) return last;
-    if (i < retries) await new Promise<void>((r) => setTimeout(r, baseMs * 2 ** i));
+    if (i < retries) await new Promise<void>((r) => setTimeout(r, Math.min(baseMs * 2 ** i, 3000)));
   }
   return last as Result<T>;
 }
@@ -161,6 +161,7 @@ export function makeAnthropicCodeGenerator(
         'CSS e JavaScript devono essere INLINE: nessuna risorsa esterna (niente CDN, font remoti o immagini esterne).',
         'HTML5 valido: parti con <!DOCTYPE html>, includi <head> con <meta charset="utf-8"> e <meta name="viewport">.',
         'Rispetta TUTTI i requisiti elencati, usando i testi ESATTI dove indicato.',
+        'La pagina deve essere UNA sola schermata scrollabile: NIENTE tab o navigazione che nasconde sezioni via JavaScript. Tutti i contenuti e il form devono essere raggiungibili scorrendo (non mettere display:none su sezioni di contenuto o sul form).',
         'Rispondi SOLO con il codice HTML: nessuna spiegazione, nessun blocco markdown.',
       ].join('\n');
 

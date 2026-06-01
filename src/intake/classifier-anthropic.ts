@@ -63,6 +63,7 @@ Scegli il "kind" giusto e COMPILA TUTTI i campi richiesti per quel tipo:
 - navigation: fromRoute, linkText, toRoutePattern
 - route-loads: route
 Se la frase descrive un form/contatti/prenotazione con un esito dopo l'invio, usa SEMPRE form-submission e DEDUCI campi ragionevoli (es. nome, email, messaggio) anche se non elencati esplicitamente.
+Per "route"/"fromRoute" usa ESCLUSIVAMENTE una delle Route note indicate; se c'è solo "/", usa sempre "/". Le ancore interne (es. #contatti) NON sono route.
 Usa kind="not-verifiable" SOLO per frasi puramente soggettive (es. "tono elegante", "deve piacere", "moderno").`;
 
 interface AnthropicConfig {
@@ -79,7 +80,15 @@ export function validateCriterion(
   const o = raw as Record<string, unknown>;
   const home = knownRoutes[0] ?? '/';
   const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() !== '' ? v : undefined);
-  const route = str(o.route) ?? home;
+  // La route DEVE essere una di quelle note: le ancore interne (#contatti) o le
+  // route inventate dal modello vengono riportate alla home (sito a pagina unica → "/").
+  const clampRoute = (v: unknown): string => {
+    const r = str(v);
+    if (!r) return home;
+    if (knownRoutes.length === 0 || knownRoutes.includes(r)) return r;
+    return home;
+  };
+  const route = clampRoute(o.route);
 
   switch (o.kind) {
     case 'content-present': {
@@ -94,7 +103,7 @@ export function validateCriterion(
       const linkText = str(o.linkText);
       const toRoutePattern = str(o.toRoutePattern);
       if (!linkText || !toRoutePattern) return { reason: 'mancano "linkText"/"toRoutePattern"' };
-      return { spec: { kind: 'navigation', fromRoute: str(o.fromRoute) ?? home, linkText, toRoutePattern } };
+      return { spec: { kind: 'navigation', fromRoute: clampRoute(o.fromRoute), linkText, toRoutePattern } };
     }
     case 'form-submission': {
       const confirmationText = str(o.confirmationText);
@@ -150,12 +159,12 @@ export function makeAnthropicClassifier(config: AnthropicConfig): IntakeClassifi
         return err(appError('LLM_NETWORK_ERROR', 'Chiamata ad Anthropic fallita.', { cause, retryable: true }));
       }
     };
-    // retry sui transitori
+    // retry sui transitori (rete/429/5xx)
     let last: Result<unknown> | undefined;
-    for (let i = 0; i <= 2; i++) {
+    for (let i = 0; i <= 4; i++) {
       last = await once();
       if (last.ok || !last.error.retryable) return last;
-      if (i < 2) await new Promise<void>((r) => setTimeout(r, 400 * 2 ** i));
+      if (i < 4) await new Promise<void>((r) => setTimeout(r, Math.min(500 * 2 ** i, 3000)));
     }
     return last as Result<unknown>;
   };

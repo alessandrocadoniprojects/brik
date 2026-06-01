@@ -7,3 +7,5 @@ dist/
 demo/tests/
 playwright-report/
 test-results/
+demo/eval-output/
+demo/generated.html
