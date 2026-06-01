@@ -13,3 +13,5 @@ demo/generated.html
 demo/preview-output/
 demo/edit-output/
 *.zip
+
+demo/projects/
