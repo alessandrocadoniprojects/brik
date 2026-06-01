@@ -21,6 +21,12 @@ export type ProjectCategory =
   | 'blog'
   | 'crud-app';
 
+/** Una pagina di un sito multi-pagina: percorso servito + HTML autosufficiente. */
+export interface SitePage {
+  readonly route: string;
+  readonly html: string;
+}
+
 /**
  * Criterio di accettazione OSSERVABILE (Livello 0).
  * Deve essere verificabile da una persona o da un test, non vago.
