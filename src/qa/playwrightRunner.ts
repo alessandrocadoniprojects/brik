@@ -25,7 +25,7 @@ const norm = (s: string): string =>
   s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 
 const REVEAL_RE = /contatt|prenot|appuntament|scriv|richiest|prenotazione|contact/i;
-const SUBMIT_RE = /invia|inviare|spedisci|prenota|richiedi|iscriv|conferma|submit|manda|registra/i;
+const SUBMIT_RE = /invia|inviare|spedisci|prenota|richiedi|iscriv|conferma|submit|manda|registra|aggiungi|salva|crea/i;
 
 export function makePlaywrightQaRunner(
   baseUrl: string,
