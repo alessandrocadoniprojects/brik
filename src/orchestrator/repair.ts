@@ -28,7 +28,7 @@ export interface RepairOutcome {
 }
 
 /** Estrae l'HTML dalla risposta del modello, togliendo eventuali fence markdown. */
-function extractHtml(raw: string): string | null {
+export function extractHtml(raw: string): string | null {
   let s = raw.trim();
   const fence = s.match(/```(?:html)?\s*([\s\S]*?)```/i);
   if (fence && fence[1]) s = fence[1].trim();

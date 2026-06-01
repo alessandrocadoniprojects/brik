@@ -9,3 +9,7 @@ playwright-report/
 test-results/
 demo/eval-output/
 demo/generated.html
+
+demo/preview-output/
+demo/edit-output/
+*.zip
