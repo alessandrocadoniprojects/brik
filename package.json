@@ -1,0 +1,14 @@
+{
+  "name": "builder",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Builder di prodotti digitali per non-tecnici — Fase 0+1",
+  "scripts": {
+    "start": "tsx src/cli/run.ts",
+    "demo:phase1": "tsx demo/phase1.ts",
+    "demo:qa": "tsx demo/run-qa.ts",
+    "demo:gen": "tsx demo/gen.ts",
+    "typecheck": "tsc --noEmit"
+  }
+}
