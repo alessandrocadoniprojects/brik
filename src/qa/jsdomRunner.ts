@@ -72,12 +72,25 @@ function runOne(c: AcceptanceCriterion, check: CheckSpec, html: HtmlResolver): C
       const form = doc.querySelector('form');
       if (!form) return fail('Form non trovato.');
       form.dispatchEvent(new dom.window.Event('submit', { cancelable: true, bubbles: true }));
-      const visible = [...doc.querySelectorAll('*')].some(
-        (el) =>
-          el.textContent?.includes(check.confirmationText) &&
-          (el as HTMLElement).style.display !== 'none',
-      );
-      return visible ? pass() : fail(`Conferma non visibile: "${check.confirmationText}"`);
+      const containsText = (el: Element): boolean =>
+        el.textContent?.includes(check.confirmationText) ?? false;
+      // Un elemento è visibile se né esso né un suo antenato ha display:none.
+      const isVisible = (el: Element | null): boolean => {
+        let cur: Element | null = el;
+        while (cur) {
+          if ((cur as HTMLElement).style?.display === 'none') return false;
+          cur = cur.parentElement;
+        }
+        return true;
+      };
+      // Considera solo gli elementi che contengono DAVVERO il testo (i più
+      // profondi), non gli antenati che lo ereditano via textContent: così un
+      // messaggio in un <div display:none> non passa per colpa del <body>.
+      const deepest = [...doc.querySelectorAll('*')]
+        .filter(containsText)
+        .filter((el) => ![...el.children].some(containsText));
+      const visible = deepest.some(isVisible);
+      return visible ? pass() : fail(`Conferma non visibile dopo invio: "${check.confirmationText}"`);
     }
   }
 }

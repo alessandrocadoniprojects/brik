@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trattoria da Mario</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --rust: #b5451b;
+      --gold: #c9922a;
+      --cream: #fdf6ec;
+      --dark: #2c1a0e;
+      --mid: #6b3e26;
+      --light-text: #fff8f0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: Georgia, 'Times New Roman', serif;
+      background-color: var(--cream);
+      color: var(--dark);
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    /* ===== NAV ===== */
+    nav {
+      background-color: var(--dark);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1.5rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+
+    .nav-logo {
+      font-size: 1.2rem;
+      color: var(--gold);
+      font-weight: bold;
+      letter-spacing: 0.05em;
+      text-decoration: none;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 1.5rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--light-text);
+      text-decoration: none;
+      font-size: 0.9rem;
+      letter-spacing: 0.04em;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: var(--gold);
+    }
+
+    /* ===== HERO ===== */
+    .hero {
+      background: linear-gradient(135deg, var(--dark) 0%, var(--mid) 60%, var(--rust) 100%);
+      min-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 3rem 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        radial-gradient(circle at 20% 30%, rgba(201,146,42,0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(181,69,27,0.2) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .hero-ornament {
+      font-size: 2.5rem;
+      color: var(--gold);
+      margin-bottom: 0.5rem;
+      animation: fadeDown 0.8s ease both;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.2rem, 8vw, 4.5rem);
+      color: var(--light-text);
+      letter-spacing: 0.04em;
+      text-shadow: 2px 4px 12px rgba(0,0,0,0.5);
+      animation: fadeDown 0.9s ease 0.1s both;
+    }
+
+    .hero-subtitle {
+      font-size: clamp(1rem, 3.5vw, 1.4rem);
+      color: var(--gold);
+      margin-top: 0.6rem;
+      letter-spacing: 0.08em;
+      font-style: italic;
+      animation: fadeDown 1s ease 0.2s both;
+    }
+
+    .hero-divider {
+      width: 80px;
+      height: 2px;
+      background: var(--gold);
+      margin: 1.5rem auto;
+      animation: fadeDown 1s ease 0.3s both;
+    }
+
+    .hero-desc {
+      max-width: 560px;
+      color: rgba(255,248,240,0.85);
+      font-size: clamp(0.95rem, 2.5vw, 1.1rem);
+      animation: fadeDown 1s ease 0.4s both;
+    }
+
+    .hero-btn {
+      display: inline-block;
+      margin-top: 2rem;
+      padding: 0.85rem 2.2rem;
+      background-color: var(--gold);
+      color: var(--dark);
+      border-radius: 3px;
+      text-decoration: none;
+      font-weight: bold;
+      font-size: 1rem;
+      letter-spacing: 0.05em;
+      transition: background-color 0.25s, transform 0.2s;
+      animation: fadeDown 1s ease 0.5s both;
+    }
+
+    .hero-btn:hover {
+      background-color: var(--rust);
+      color: #fff;
+      transform: translateY(-2px);
+    }
+
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ===== SECTION COMMONS ===== */
+    section {
+      padding: 4rem 1.5rem;
+    }
+
+    .section-title {
+      text-align: center;
+      font-size: clamp(1.6rem, 5vw, 2.4rem);
+      color: var(--rust);
+      margin-bottom: 0.4rem;
+    }
+
+    .section-sub {
+      text-align: center;
+      color: var(--mid);
+      font-style: italic;
+      margin-bottom: 2.5rem;
+      font-size: 1rem;
+    }
+
+    .gold-line {
+      display: block;
+      width: 60px;
+      height: 2px;
+      background: var(--gold);
+      margin: 0.6rem auto 2.2rem;
+    }
+
+    /* ===== ABOUT ===== */
+    .about {
+      background-color: #fff;
+    }
+
+    .about-inner {
+      max-width: 800px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2.5rem;
+      align-items: center;
+    }
+
+    .about-text p {
+      margin-bottom: 1rem;
+      font-size: 1rem;
+      color: var(--dark);
+    }
+
+    .about-badge {
+      background: linear-gradient(135deg, var(--dark), var(--mid));
+      border-radius: 8px;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      color: var(--light-text);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+
+    .about-badge .year {
+      font-size: 3rem;
+      color: var(--gold);
+      font-weight: bold;
+      display: block;
+    }
+
+    .about-badge .year-label {
+      font-size: 0.9rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255,248,240,0.7);
+      margin-top: 0.3rem;
+    }
+
+    .about-badge .stars {
+      font-size: 1.4rem;
+      color: var(--gold);
+      margin-top: 1rem;
+      letter-spacing: 0.2em;
+    }
+
+    /* ===== MENU ===== */
+    .menu-section {
+      background-color: var(--cream);
+    }
+
+    .menu-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.5rem;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .menu-card {
+      background: #fff;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      transition: transform 0.25s, box-shadow 0.25s;
+    }
+
+    .menu-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 10px 28px rgba(0,0,0,0.14);
+    }
+
+    .menu-card-header {
+      background: linear-gradient(135deg, var(--rust), var(--mid));
+      padding: 1.2rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .menu-card-header .icon {
+      font-size: 1.8rem;
+    }
+
+    .menu-card-header h3 {
+      color: #fff;
+      font-size: 1.15rem;
+      letter-spacing: 0.04em;
+    }
+
+    .menu-card-body {
+      padding: 1.2rem 1.5rem;
+    }
+
+    .menu-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 0.5rem 0;
+      border-bottom: 1px dashed #e8d8c4;
+      font-size: 0.95rem;
+    }
+
+    .menu-item:last-child {
+      border-bottom: none;
+    }
+
+    .menu-item .name {
+      color: var(--dark);
+    }
+
+    .menu-item .price {
+      color: var(--rust);
+      font-weight: bold;
+      white-space: nowrap;
+      margin-left: 0.5rem;
+    }
+
+    /* ===== SPECIALITÀ ===== */
+    .specials {
+      background: linear-gradient(135deg, var(--dark) 0%, var(--mid) 100%);
+      color: var(--light-text);
+      text-align: center;
+    }
+
+    .specials .section-title {
+      color: var(--gold);
+    }
+
+    .specials .section-sub {
+      color: rgba(255,248,240,0.7);
+    }
+
+    .specials-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.5rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .special-item {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(201,146,42,0.3);
+      border-radius: 8px;
+      padding: 2rem 1rem;
+      transition: background 0.25s;
+    }
+
+    .special-item:hover {
+      background: rgba(255,255,255,0.12);
+    }
+
+    .special-item .s-icon {
+      font-size: 2.5rem;
+      display: block;
+      margin-bottom: 0.8rem;
+    }
+
+    .special-item h4 {
+      color: var(--gold);
+      font-size: 1.05rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .special-item p {
+      font-size: 0.88rem;
+      color: rgba(255,248,240,0.75);
+      line-height: 1.5;
+    }
+
+    /* ===== GALLERIA ===== */
+    .gallery {
+      background: #fff;
+    }
+
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .gallery-box {
+      aspect-ratio: 1;
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem;
+      background: linear-gradient(135deg, #f0e0cc, #e8cdb0);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      transition: transform 0.25s;
+      cursor: default;
+    }
+
+    .gallery-box:hover {
+      transform: scale(1.04);
+    }
+
+    /* ===== CONTATTI ===== */
+    .contact {
+      background: var(--cream);
+    }
+
+    .contact-inner {
+      max-width: 800px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2.5rem;
+    }
+
+    .contact-info h3 {
+      color: var(--rust);
+      font-size: 1.2rem;
+      margin-bottom: 1.2rem;
+    }
+
+    .contact-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+    }
+
+    .contact-row .c-icon {
+      font-size: 1.3rem;
+      flex-shrink: 0;
+      margin-top: 0.1rem;
+    }
+
+    .contact-row div {
+      font-size: 0.95rem;
+    }
+
+    .contact-row div strong {
+      display: block;
+      color: var(--dark);
+    }
+
+    .contact-row div span {
+      color: var(--mid);
+    }
+
+    .contact-form h3 {
+      color: var(--rust);
+      font-size: 1.2rem;
+      margin-bottom: 1.2rem;
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--mid);
+      margin-bottom: 0.3rem;
+      font-weight: bold;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      width: 100%;
+      padding: 0.65rem 0.9rem;
+      border: 1px solid #d4bfa0;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      background: #fff;
+      color: var(--dark);
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: var(--gold);
+    }
+
+    .form-group textarea {
+      resize: vertical;
+      min-height: 90px;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 0.85rem;
+      background: var(--rust);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 1rem;
+      font-family: inherit;
+      font-weight: bold;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: background 0.25s, transform 0.2s;
+    }
+
+    .submit-btn:hover {
+      background: var(--mid);
+      transform: translateY(-1px);
+    }
+
+    /* ===== MAP PLACEHOLDER ===== */
+    .map-placeholder {
+      background: linear-gradient(135deg, #e8d0b0, #d4b890);
+      border-radius: 8px;
+      height: 160px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.5rem;
+      color: var(--mid);
+      margin-top: 1.5rem;
+      border: 2px dashed #c9a870;
+    }
+
+    .map-placeholder span {
+      font-size: 0.85rem;
+      font-style: italic;
+      color: var(--mid);
+      margin-top: 0.4rem;
+    }
+
+    /* ===== ORARI ===== */
+    .orari {
+      background: #fff;
+    }
+
+    .orari-inner {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .orari-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .orari-table tr {
+      border-bottom: 1px solid #eee;
+    }
+
+    .orari-table tr:last-child {
+      border-bottom: none;
+    }
+
+    .orari-table td {
+      padding: 0.75rem 0.5rem;
+      font-size: 0.95rem;
+    }
+
+    .orari-table td:first-child {
+      color: var(--mid);
+      font-weight: bold;
+    }
+
+    .orari-table td:last-child {
+      text-align: right;
+      color: var(--dark);
+    }
+
+    .orari-table tr.chiuso td {
+      color: #aaa;
+    }
+
+    .badge-open {
+      display: inline-block;
+      background: #2e7d32;
+      color: #fff;
+      font-size: 0.72rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 20px;
+      letter-spacing: 0.04em;
+      margin-left: 0.5rem;
+      vertical-align: middle;
+    }
+
+    /* ===== FOOTER ===== */
+    footer {
+      background: var(--dark);
+      color: rgba(255,248,240,0.7);
+      text-align: center;
+      padding: 2rem 1.5rem;
+    }
+
+    footer .footer-logo {
+      font-size: 1.4rem;
+      color: var(--gold);
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+    }
+
+    footer p {
+      font-size: 0.85rem;
+      margin-top: 0.3rem;
+    }
+
+    footer .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 1.5rem;
+      list-style: none;
+      margin: 1rem 0;
+    }
+
+    footer .footer-links a {
+      color: rgba(255,248,240,0.6);
+      text-decoration: none;
+      font-size: 0.85rem;
+      transition: color 0.2s;
+    }
+
+    footer .footer-links a:hover {
+      color: var(--gold);
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 600px) {
+      nav {
+        padding: 0.65rem 1rem;
+      }
+
+      .nav-links {
+        gap: 0.9rem;
+      }
+
+      .nav-links a {
+        font-size: 0.78rem;
+      }
+
+      .about-inner {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+      }
+
+      .contact-inner {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+      }
+
+      .hero {
+        min-height: 80vh;
+        padding: 2.5rem 1rem;
+      }
+
+      .gallery-box {
+        font-size: 2.2rem;
+      }
+
+      .specials-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 380px) {
+      .nav-links {
+        gap: 0.6rem;
+      }
+
+      .specials-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <a href="#hero" class="nav-logo">🍷 da Mario</a>
+    <ul class="nav-links">
+      <li><a href="#about">Chi Siamo</a></li>
+      <li><a href="#menu">Menù</a></li>
+      <li><a href="#orari">Orari</a></li>
+      <li><a href="#contact">Contatti</a></li>
+    </ul>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero" id="hero">
+    <div class="hero-ornament">🌿</div>
+    <h1>Trattoria da Mario</h1>
+    <p class="hero-subtitle">Cucina sarda dal 1985</p>
+    <div class="hero-divider"></div>
+    <p class="hero-desc">
+      Sapori autentici dell'isola, ricette tramandate di generazione in generazione,
+      materie prime a km zero. Benvenuti nella nostra tavola.
+    </p>
+    <a href="#menu" class="hero-btn">Scopri il Menù</a>
+  </section>
+
+  <!-- CHI SIAMO -->
+  <section class="about" id="about">
+    <h2 class="section-title">Chi Siamo</h2>
+    <em class="section-sub">Una storia lunga quarant'anni</em>
+    <span class="gold-line"></span>
+    <div class="about-inner">
+      <div class="about-text">
+        <p>
+          La <strong>Trattoria da Mario</strong> nasce nel cuore della Sardegna nel 1985,
+          dall'amore di Mario Serreli per la cucina della sua terra. Ogni piatto racconta
+          una storia: le erbe del Supramonte, i formaggi del Gennargentu,
+          il vino Cannonau delle colline di Nuoro.
+        </p>
+        <p>
+          Oggi, la famiglia Serreli porta avanti la stessa passione con ingredienti
+          rigorosamente locali, accogliendo ogni ospite come se fosse a casa propria.
+          La cucina sarda è la nostra anima: semplice, vera, generosa.
+        </p>
+        <p>
+          Che siate sardi doc o visitatori alla scoperta dell'isola, vi aspettiamo
+          con un buon bicchiere di Vermentino e il profumo del pane carasau appena sfornato.
+        </p>
+      </div>
+      <div class="about-badge">
+        <span class="year">1985</span>
+        <span class="year-label">Anno di fondazione</span>
+        <div class="stars">★★★★★</div>
+        <p style="font-size:0.85rem; margin-top:0.8rem; color:rgba(255,248,240,0.7);">
+          Oltre 40 anni di tradizione sarda a tavola
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- MENÙ -->
+  <section class="menu-section" id="menu">
+    <h2 class="section-title">Il Nostro Menù</h2>
+    <em class="section-sub">Prodotti freschi, ricette tradizionali</em>
+    <span class="gold-line"></span>
+    <div class="menu-grid">
+
+      <div class="menu-card">
+        <div class="menu-card-header">
+          <span class="icon">🥗</span>
+          <h3>Antipasti</h3>
+        </div>
+        <div class="menu-card-body">
+          <div class="menu-item"><span class="name">Antipasto sardo misto</span><span class="price">€ 12</span></div>
+          <div class="menu-item"><span class="name">Pane carasau con lardo</span><span class="price">€ 7</span></div>
+          <div class="menu-item"><span class="name">Bottarga di muggine</span><span class="price">€ 14</span></div>
+          <div class="menu-item"><span class="name">Formaggi e salumi locali</span><span class="price">€ 13</span></div>
+          <div class="menu-item"><span class="name">Culurgiones fritti</span><span class="price">€ 9</span></div>
+        </div>
+      </div>
+
+      <div class="menu-card">
+        <div class="menu-card-header">
+          <span class="icon">🍝</span>
+          <h3>Primi Piatti</h3>
+        </div>
+        <div class="menu-card-body">
+          <div class="menu-item"><span class="name">Malloreddus alla campidanese</span><span class="price">€ 14</span></div>
+          <div class="menu-item"><span class="name">Culurgiones al pomodoro</span><span class="price">€ 15</span></div>
+          <div class="menu-item"><span class="name">Zuppa gallurese</span><span class="price">€ 13</span></div>
+          <div class="menu-item"><span class="name">Minestra di ceci e lardo</span><span class="price">€ 11</span></div>
+          <div class="menu-item"><span class="name">Fregola con arselle</span><span class="price">€ 16</span></div>
+        </div>
+      </div>
+
+      <div class="menu-card">
+        <div class="menu-card-header">
+          <span class="icon">🥩</span>
+          <h3>Secondi Piatti</h3>
+        </div>
+        <div class="menu-card-body">
+          <div class="menu-item"><span class="name">Porcetto allo spiedo</span><span class="price">€ 22</span></div>
+          <div class="menu-item"><span class="name">Agnello alla sarda</span><span class="price">€ 19</span></div>
+          <div class="menu-item"><span class="name">Burrida di gattuccio</span><span class="price">€ 18</span></div>
+          <div class="menu-item"><span class="name">Pecora in cappotto</span><span class="price">€ 17</span></div>
+          <div class="menu-item"><span class="name">Bistecca di manzo locale</span><span class="price">€ 20</span></div>
+        </div>
+      </div>
+
+      <div class="menu-card">
+        <div class="menu-card-header">
+          <span class="icon">🍮</span>
+          <h3>Dolci & Vini</h3>
+        </div>
+        <div class="menu-card-body">
+          <div class="menu-item"><span class="name">Seadas con miele</span><span class="price">€ 8</span></div>
+          <div class="menu-item"><span class="name">Pardulas al formaggio</span><span class="price">€ 7</span></div>
+          <div class="menu-item"><span class="name">Cannonau Doc Nuoro</span><span class="price">€ 18</span></div>
+          <div class="menu-item"><span class="name">Vermentino di Gallura</span><span class="price">€ 17</span></div>
+          <div class="menu-item"><span class="name">Mirto sardo artigianale</span><span class="price">€ 4</span></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SPECIALITÀ -->
+  <section class="specials">
+    <h2 class="section-title">Le Nostre Specialità</h2>
+    <em class="section-sub">I piatti che ci rendono unici</em>
+    <span class="gold-line" style="background:var(--gold);"></span>
+    <div class="specials-grid">
+      <div class="special-item">
+        <span class="s-icon">🐷</span>
+        <h4>Porcetto allo Spiedo</h4>
+        <p>Maialino sardo cotto lentamente su brace di legno aromatico per 4 ore.</p>
+      </div>
+      <div class="special-item">
+        <span class="s-icon">🥟</span>
+        <h4>Culurgiones</h4>
+        <p>Ravioli ripieni di patate, menta e pecorino, con chiusura a spiga artigianale.</p>
+      </div>
+      <div class="special-item">
+        <span class="s-icon">🐟</span>
+        <h4>Bottarga di Muggine</h4>
+        <p>Pregiata bottarga di Cabras, servita in scaglie su pane carasau caldo.</p>
+      </div>
+      <div class="special-item">
+        <span class="s-icon">🍯</span>
+        <h4>Seadas con Miele</h4>
+        <p>Dolce fritto ripieno di formaggio fresco, irrorato di miele amaro sardo.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- GALLERIA -->
+  <section class="gallery" id="gallery">
+    <h2 class="section-title">La Nostra Atmosfera</h2>
+    <em class="section-sub">Immagini dalla nostra trattoria</em>
+    <span class="gold-line"></span>
+    <div class="gallery-grid">
+      <div class="gallery-box">🍷</div>
+      <div class="gallery-box">🥘</div>
+      <div class="gallery-box">🫕</div>
+      <div class="gallery-box">🧀</div>
+      <div class="gallery-box">🌿</div>
+      <div class="gallery-box">🍞</div>
+    </div>
+  </section>
+
+  <!-- ORARI -->
+  <section class="orari" id="orari">
+    <h2 class="section-title">Orari di Apertura</h2>
+    <em class="section-sub">Vi aspettiamo a pranzo e cena</em>
+    <span class="gold-line"></span>
+    <div class="orari-inner">
+      <table class="orari-table">
+        <tbody>
+          <tr>
+            <td>Lunedì</td>
+            <td>12:00 – 15:00 &nbsp;|&nbsp; 19:00 – 22:30 <span class="badge-open">Aperto</span></td>
+          </tr>
+          <tr>
+            <td>Martedì</td>
+            <td>12:00 – 15:00 &nbsp;|&nbsp; 19:00 – 22:30</td>
+          </tr>
+          <tr class="chiuso">
+            <td>Mercoledì</td>
+            <td>Chiuso</td>
+          </tr>
+          <tr>
+            <td>Giovedì</td>
+            <td>12:00 – 15:00 &nbsp;|&nbsp; 19:00 – 22:30</td>

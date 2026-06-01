@@ -9,6 +9,18 @@
     "demo:phase1": "tsx demo/phase1.ts",
     "demo:qa": "tsx demo/run-qa.ts",
     "demo:gen": "tsx demo/gen.ts",
+    "demo:wiring": "tsx demo/test-build-wiring.ts",
+    "demo:real": "tsx --env-file=.env demo/real.ts",
+    "demo:build": "tsx --env-file=.env demo/real-build.ts",
+    "demo:build-browser": "tsx --env-file=.env demo/real-build-browser.ts",
     "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^28.0.3",
+    "@types/node": "^25.9.1",
+    "jsdom": "^29.1.1",
+    "playwright": "^1.60.0",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
   }
 }
