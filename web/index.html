@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>brik — studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Hanken+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark">brik</span>
+      <span class="tag">studio</span>
+    </div>
+    <div class="top-actions">
+      <select id="projectSelect" class="select" aria-label="Progetti">
+        <option value="">— progetti —</option>
+      </select>
+      <button id="newBtn" class="btn ghost">Nuovo</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <!-- CHAT -->
+    <section class="chat" aria-label="Conversazione">
+      <div id="messages" class="messages">
+        <div class="msg bot intro">
+          <p class="lead">Descrivi il sito che vuoi.</p>
+          <p class="muted">Es. «Sito per la pizzeria Da Ciro: home con slogan “Forno a legna dal 1980”, pagina menù con Margherita, Marinara, Diavola, e una pagina contatti con form nome/email/messaggio che mostra “Grazie, a presto”.»</p>
+        </div>
+      </div>
+      <form id="composer" class="composer">
+        <div class="composer-fields">
+          <input id="ownerEmail" class="email-input" type="email" placeholder="Email dove ricevere i messaggi del form" autocomplete="email" />
+          <textarea id="input" rows="2" placeholder="Descrivi il sito…" autocomplete="off"></textarea>
+        </div>
+        <button id="send" class="btn accent" type="submit">Invia</button>
+      </form>
+    </section>
+
+    <!-- ANTEPRIMA -->
+    <section class="preview" aria-label="Anteprima">
+      <div class="toolbar">
+        <div class="status">
+          <span id="statusPill" class="pill empty">nessun progetto</span>
+          <span id="versionTag" class="ver"></span>
+        </div>
+        <nav id="routes" class="routes" aria-label="Pagine"></nav>
+        <div class="actions">
+          <button id="revertBtn" class="btn ghost" disabled>Annulla ultima</button>
+          <button id="approveBtn" class="btn" disabled>Approva</button>
+          <button id="publishBtn" class="btn accent" disabled>Pubblica</button>
+        </div>
+      </div>
+      <div class="frame-wrap">
+        <div id="placeholder" class="placeholder">
+          <div class="ph-inner">
+            <span class="ph-mark">brik</span>
+            <p>L'anteprima del sito comparirà qui.</p>
+          </div>
+        </div>
+        <iframe id="frame" title="Anteprima sito" sandbox="allow-scripts allow-forms allow-same-origin allow-popups" hidden></iframe>
+        <div id="busy" class="busy" hidden>
+          <div class="spinner"></div>
+          <p id="busyText">Sto costruendo…</p>
+          <p class="muted small">Generazione + verifica reale nel browser: può richiedere fino a un minuto.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
