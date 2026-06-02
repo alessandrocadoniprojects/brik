@@ -21,6 +21,8 @@ import {
 } from '@core';
 import type { FormDelivery } from '@core';
 import { injectForms, deInjectForms } from '../../project/forms.js';
+import { resolveImages } from '../../project/images.js';
+import type { ImageSource } from '../images/pexels.js';
 
 /** Percorso + etichetta del menu per una pagina. */
 export type RouteInfo = SiteRoute;
@@ -43,10 +45,19 @@ export interface SiteGenerator {
 
 const SYSTEM = [
   'Sei un generatore di siti web MULTI-PAGINA. Produci PIU file HTML completi, uno per ciascuna pagina richiesta.',
-  'Ogni file e autosufficiente: CSS e JS INLINE, nessuna risorsa esterna; HTML5 valido con <meta charset="utf-8"> e <meta name="viewport" content="width=device-width, initial-scale=1">.',
+  'Ogni file e autosufficiente: CSS e JS INLINE, nessun font o risorsa esterna; HTML5 valido con <meta charset="utf-8"> e <meta name="viewport" content="width=device-width, initial-scale=1">.',
   'TUTTE le pagine condividono la STESSA intestazione con un menu di navigazione che collega OGNI pagina usando ESATTAMENTE i percorsi indicati negli href (es. <a href="/contatti">). Stesso stile e stesso footer ovunque.',
   'Ogni pagina e UNA sola schermata scrollabile: niente tab o sezioni nascoste via JavaScript.',
   'Metti ogni contenuto nella SUA pagina e usa i testi ESATTI dove indicato.',
+  // DESIGN
+  'DESIGN: punta a un risultato moderno, curato e distintivo, NON generico. Definisci una palette coerente (2-3 colori + neutri) adatta al tipo di attivita, una scala tipografica chiara (titoli grandi e ariosi, testo leggibile 16-18px, interlinea comoda), spaziature generose (padding di sezione ampi) e una gerarchia visiva netta. Usa solo font di sistema via stack CSS (es. system-ui, -apple-system, Segoe UI, Roboto, sans-serif), MAI Google Fonts o font esterni.',
+  'STRUTTURA RICCA: la home ha una hero d\'impatto (titolo grande, sottotitolo, eventuale pulsante CTA), poi sezioni ben ritmate (es. punti di forza in card/griglia, una citazione/claim, informazioni utili). Pulsanti e link stilizzati con stato :hover. Footer completo e coerente su tutte le pagine.',
+  'RESPONSIVE: layout fluido, NIENTE overflow orizzontale a 375px; su mobile le griglie diventano colonna singola, i titoli si riducono, i tap target restano ampi. Usa unita relative, max-width sui contenuti e media query.',
+  // IMMAGINI
+  'IMMAGINI (foto stock reali): dove una foto rafforza la pagina (hero, sezione "chi siamo", galleria, voci di menu/prodotti) inserisci un SEGNAPOSTO nel formato <img data-brik-img="QUERY" alt="descrizione"> SENZA attributo src: il sistema lo sostituira con una foto vera pertinente. La QUERY deve essere in INGLESE, 2-5 parole concrete (es. "wood fired pizza", "cozy restaurant interior", "fresh italian ingredients", "happy team office").',
+  'Stila SEMPRE le immagini cosi non rompono il layout: mettile in un contenitore con dimensioni/aspetto definiti e applica img { width:100%; height:100%; object-fit:cover; display:block; }. Per una hero con foto usa un contenitore alto con l\'<img> in object-fit cover (NON usare background-image: il segnaposto funziona solo con il tag <img>).',
+  'Usa le foto con misura: tipicamente 1 hero + 2-4 immagini totali nel sito; NON mettere immagini dove non aggiungono valore. NON inventare URL di immagini ne usare servizi esterni: usa SEMPRE e solo il segnaposto data-brik-img.',
+  // FORM + FORMATO
   'NON scrivere mai un form di contatto/prenotazione: dove un form deve apparire, inserisci ESATTAMENTE il commento <!--BRIK_CONTACT_FORM--> e NIENT\'ALTRO per quel form (niente <form>, campi o JS). Lo costruisce il sistema.',
   'FORMATO OBBLIGATORIO: per ogni pagina una riga con il delimitatore esatto "<<<FILE {percorso}>>>" (es. "<<<FILE /contatti>>>") e SUBITO SOTTO il codice HTML completo della pagina. Nessun altro testo, nessun markdown.',
 ].join('\n');
@@ -116,15 +127,17 @@ function delimited(pages: readonly SitePage[]): string {
 
 export function makeAnthropicSiteGenerator(
   llm: LLMProvider,
-  opts: { readonly tier?: LLMRequest['tier']; readonly delivery?: FormDelivery } = {},
+  opts: { readonly tier?: LLMRequest['tier']; readonly delivery?: FormDelivery; readonly images?: ImageSource } = {},
 ): SiteGenerator {
   const tier = opts.tier ?? 'balanced';
   const expectedRoutes = (routes: readonly RouteInfo[]) => routes.map((r) => r.route);
-  const finish = (raw: string, spec: ProjectSpec, routes: readonly RouteInfo[]): Result<SitePage[]> => {
+  const finish = async (raw: string, spec: ProjectSpec, routes: readonly RouteInfo[]): Promise<Result<SitePage[]>> => {
     const parsed = parseSite(raw, expectedRoutes(routes));
     if (!parsed.ok) return parsed;
     const descriptor = opts.delivery?.describe({ siteId: spec.id, subject: spec.title });
-    return ok(injectForms(parsed.value, spec, descriptor));
+    const withForms = injectForms(parsed.value, spec, descriptor);
+    if (!opts.images) return ok(withForms);
+    return ok(await resolveImages(withForms, opts.images));
   };
 
   return {

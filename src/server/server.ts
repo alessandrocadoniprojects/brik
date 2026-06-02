@@ -27,6 +27,7 @@ import { makeAnthropicSiteGenerator } from '../adapters/anthropic/siteGenerator.
 import { makeCloudflarePagesHost } from '../adapters/hosting/cloudflarePages.js';
 import { makeCloudflarePagesResendHost } from '../adapters/hosting/cloudflarePagesResend.js';
 import { makeOwnedFormDelivery } from '../adapters/forms/owned.js';
+import { makePexelsImageSource } from '../adapters/images/pexels.js';
 import { makeAnthropicClassifier } from '../intake/index.js';
 import { planIntakeQuestions } from '../intake/intakeQuestions.js';
 import { makeBasicSecurityScanner } from '../security/scanner.js';
@@ -75,7 +76,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const llm = makeAnthropicLLM({ apiKey: key });
 const classifier = makeAnthropicClassifier({ apiKey: key });
 const delivery = makeOwnedFormDelivery(); // il form fa POST a /api/contact
-const generator = makeAnthropicSiteGenerator(llm, { delivery });
+const images = makePexelsImageSource(); // foto stock reali nei siti (PEXELS_API_KEY)
+const generator = makeAnthropicSiteGenerator(llm, { delivery, images });
 const plainHost = makeCloudflarePagesHost({}); // fallback senza recapito form
 const scanner = makeBasicSecurityScanner({ allowedFormHosts: [] }); // form same-origin: niente host esterni
 const store = makeFileSiteStore(dataDir);
@@ -378,6 +380,7 @@ server.headersTimeout = 0;
 server.listen(PORT, () => {
   console.log('brik e attivo su http://localhost:' + PORT);
   console.log('Recapito form: ' + (process.env.RESEND_API_KEY ? 'attivo (Resend) — from: ' + (RESEND_FROM ?? 'onboarding@resend.dev') : 'NON configurato (imposta RESEND_API_KEY; senza, il sito pubblicato non recapita i messaggi)'));
+  console.log('Immagini: ' + (process.env.PEXELS_API_KEY ? 'attive (Pexels)' : 'NON configurate (imposta PEXELS_API_KEY; senza, i siti escono senza foto)'));
   console.log('Hosting: ' + (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID ? 'Cloudflare Pages' : 'NON configurato (publish dara errore finche non imposti le chiavi)'));
 });
 
