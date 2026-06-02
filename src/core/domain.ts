@@ -27,6 +27,12 @@ export interface SitePage {
   readonly html: string;
 }
 
+/** Una voce di struttura: percorso + etichetta nel menu. */
+export interface SiteRoute {
+  readonly route: string;
+  readonly label: string;
+}
+
 /**
  * Criterio di accettazione OSSERVABILE (Livello 0).
  * Deve essere verificabile da una persona o da un test, non vago.

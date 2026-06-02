@@ -13,16 +13,15 @@ import {
   type LLMRequest,
   type ProjectSpec,
   type SitePage,
+  type SiteRoute,
   type Result,
   ok,
   err,
   appError,
 } from '@core';
 
-export interface RouteInfo {
-  readonly route: string;
-  readonly label: string;
-}
+/** Percorso + etichetta del menu per una pagina. */
+export type RouteInfo = SiteRoute;
 
 export interface SiteGenerator {
   generate(spec: ProjectSpec, routes: readonly RouteInfo[]): Promise<Result<SitePage[]>>;
@@ -31,6 +30,12 @@ export interface SiteGenerator {
     routes: readonly RouteInfo[],
     current: readonly SitePage[],
     failures: readonly { kind: string; detail: string }[],
+  ): Promise<Result<SitePage[]>>;
+  edit(
+    spec: ProjectSpec,
+    routes: readonly RouteInfo[],
+    current: readonly SitePage[],
+    instruction: string,
   ): Promise<Result<SitePage[]>>;
 }
 
@@ -144,6 +149,27 @@ export function makeAnthropicSiteGenerator(
         '',
         'PROBLEMI DA CORREGGERE:',
         failures.map((f) => `- [${f.kind}] ${f.detail}`).join('\n'),
+        '',
+        'PAGINE ATTUALI:',
+        delimited(current),
+      ].join('\n');
+
+      const res = await llm.complete({ system, prompt, tier, maxTokens: 16000 });
+      if (!res.ok) return err(res.error);
+      return parseSite(res.value.text, expectedRoutes(routes));
+    },
+
+    async edit(spec, routes, current, instruction) {
+      const system = [
+        SYSTEM,
+        'Questa e una MODIFICA richiesta dall\'utente: applica SOLO il cambiamento richiesto, lasciando invariato tutto il resto (contenuti, stile, navigazione, le altre pagine). Restituisci di nuovo TUTTE le pagine nel formato delimitato.',
+      ].join('\n');
+      const prompt = [
+        `Titolo del sito: ${spec.title}`,
+        `Pagine e menu: ${navSpec(routes)}`,
+        '',
+        'MODIFICA RICHIESTA:',
+        instruction,
         '',
         'PAGINE ATTUALI:',
         delimited(current),
