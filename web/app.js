@@ -18,6 +18,13 @@ const sendBtn = $('send');
 const ownerEmail = $('ownerEmail');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+let intakeActive = false;
+let pendingCreate = null;
+function disableSend(on) {
+  sendBtn.disabled = on;
+  input.disabled = on;
+}
+
 let currentId = null;
 let currentStatus = null;
 
@@ -130,11 +137,97 @@ async function refreshProjects(selected) {
 }
 
 // ---------- azioni ----------
-async function createSite(description, email) {
+async function beginCreate(description, email) {
   addMsg('user', escapeHtml(description));
+  pendingCreate = { description, email };
+  intakeActive = true;
+  disableSend(true);
+  const t = thinking('Preparo un paio di domande');
+  const data = await api('POST', '/api/intake', { description });
+  t.remove();
+  const qs = data && data.ok && Array.isArray(data.questions) ? data.questions : [];
+  if (qs.length) {
+    renderIntake(qs);
+  } else {
+    intakeActive = false;
+    disableSend(false);
+    createSite(description, email, []);
+  }
+}
+
+function renderIntake(questions) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg bot intake';
+  const intro = document.createElement('p');
+  intro.textContent = 'Un paio di precisazioni per fare le cose giuste (puoi anche saltarle):';
+  wrap.appendChild(intro);
+
+  const answers = questions.map(() => '');
+  questions.forEach((q, qi) => {
+    const block = document.createElement('div');
+    block.className = 'q-block';
+    const qp = document.createElement('p');
+    qp.className = 'q';
+    qp.textContent = q.question;
+    block.appendChild(qp);
+
+    const ti = document.createElement('input');
+    ti.type = 'text';
+    ti.className = 'q-text';
+    ti.placeholder = 'oppure scrivi…';
+    ti.addEventListener('input', () => {
+      answers[qi] = ti.value.trim();
+      block.querySelectorAll('.opt').forEach((o) => o.classList.remove('sel'));
+    });
+
+    if (Array.isArray(q.options) && q.options.length) {
+      const opts = document.createElement('div');
+      opts.className = 'opts';
+      q.options.forEach((opt) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'opt';
+        b.textContent = opt;
+        b.addEventListener('click', () => {
+          opts.querySelectorAll('.opt').forEach((o) => o.classList.remove('sel'));
+          b.classList.add('sel');
+          answers[qi] = opt;
+          ti.value = '';
+        });
+        opts.appendChild(b);
+      });
+      block.appendChild(opts);
+    }
+    block.appendChild(ti);
+    wrap.appendChild(block);
+  });
+
+  const build = document.createElement('button');
+  build.className = 'btn accent build-btn';
+  build.textContent = 'Costruisci';
+  build.addEventListener('click', () => {
+    if (!pendingCreate) return;
+    const collected = questions
+      .map((q, i) => ({ question: q.question, answer: answers[i] }))
+      .filter((a) => a.answer);
+    wrap.querySelectorAll('button, input').forEach((e) => (e.disabled = true));
+    build.textContent = 'Costruisco…';
+    intakeActive = false;
+    disableSend(false);
+    const { description, email } = pendingCreate;
+    pendingCreate = null;
+    createSite(description, email, collected);
+  });
+  wrap.appendChild(build);
+
+  messages.appendChild(wrap);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+async function createSite(description, email, answers) {
   const t = thinking('Costruisco il sito');
   setBusy(true, 'Sto costruendo…');
-  const data = await api('POST', '/api/projects', { description, email });
+  const data = await api('POST', '/api/projects', { description, email, answers: answers || [] });
   t.remove();
   setBusy(false);
   if (!data.ok) return addMsg('bot', `<p>Non sono riuscito a costruire il sito.</p><p class="tiny">${escapeHtml(data.error?.message || '')}</p>`, 'err');
@@ -215,6 +308,9 @@ async function openProject(id) {
 function resetToNew() {
   currentId = null;
   currentStatus = null;
+  intakeActive = false;
+  pendingCreate = null;
+  disableSend(false);
   projectSelect.value = '';
   statusPill.className = 'pill empty';
   statusPill.textContent = 'nessun progetto';
@@ -245,7 +341,7 @@ $('composer').addEventListener('submit', (e) => {
       return;
     }
     input.value = '';
-    createSite(text, email);
+    beginCreate(text, email);
   }
 });
 

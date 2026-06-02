@@ -28,6 +28,7 @@ import { makeCloudflarePagesHost } from '../adapters/hosting/cloudflarePages.js'
 import { makeCloudflarePagesResendHost } from '../adapters/hosting/cloudflarePagesResend.js';
 import { makeOwnedFormDelivery } from '../adapters/forms/owned.js';
 import { makeAnthropicClassifier } from '../intake/index.js';
+import { planIntakeQuestions } from '../intake/intakeQuestions.js';
 import { makeBasicSecurityScanner } from '../security/scanner.js';
 import { makeFileSiteStore } from '../project/siteStore.js';
 import { summarizeSite } from '../project/site.js';
@@ -243,18 +244,33 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, projects: out });
     }
 
+    if (path === '/api/intake' && method === 'POST') {
+      const body = await readJsonBody(req);
+      const description = typeof body.description === 'string' ? body.description.trim() : '';
+      if (!description) return sendJson(res, 400, { ok: false, error: { code: 'NO_DESCRIPTION', message: 'Descrizione mancante.' } });
+      const r = await planIntakeQuestions({ description, llm });
+      return sendJson(res, 200, { ok: true, questions: r.ok ? r.value : [] });
+    }
+
     if (path === '/api/projects' && method === 'POST') {
       const body = await readJsonBody(req);
       const description = typeof body.description === 'string' ? body.description.trim() : '';
       if (!description) return sendJson(res, 400, { ok: false, error: { code: 'NO_DESCRIPTION', message: 'Descrizione mancante.' } });
       const email = typeof body.email === 'string' ? body.email.trim() : '';
       if (!EMAIL_RE.test(email)) return sendJson(res, 400, { ok: false, error: { code: 'NO_EMAIL', message: 'Email di recapito mancante o non valida.' } });
+      const rawAnswers = Array.isArray(body.answers) ? body.answers : [];
+      const extra = rawAnswers
+        .map((a) => (a && typeof a === 'object' ? { q: String((a as Record<string, unknown>).question ?? '').trim(), a: String((a as Record<string, unknown>).answer ?? '').trim() } : null))
+        .filter((x): x is { q: string; a: string } => !!x && x.a.length > 0);
+      const fullDescription = extra.length
+        ? description + '\n\nPrecisazioni:\n' + extra.map((x) => '- ' + x.q + ' ' + x.a).join('\n')
+        : description;
       const id = newId();
       console.log('  → create: pianifico, genero le pagine, QA nel browser… (puo richiedere 1-3 min)');
       const t0 = Date.now();
       const r = await withTimeout(
         withGenRetry('create', 3, () =>
-          createProject({ store, id, ownerId: 'web', description, llm, classifier, generator, runQa, maxRepairs: 3 }),
+          createProject({ store, id, ownerId: 'web', description: fullDescription, llm, classifier, generator, runQa, maxRepairs: 3 }),
         ),
         420_000,
         'La build ha superato il tempo massimo ed e stata interrotta.',
@@ -323,12 +339,19 @@ const server = createServer(async (req, res) => {
         const host = deliveryActive
           ? makeCloudflarePagesResendHost({ ownerEmail: email as string, resendKey: RESEND_KEY, resendFrom: RESEND_FROM })
           : plainHost;
+        // Ripubblicazione: un sito gia pubblicato ha stato 'published', ma publishProject vuole 'approved'.
+        // Lo ri-approviamo per permettere un nuovo deploy (stesso contenuto approvato).
+        const pre = await getProject(store, id);
+        if (pre.ok && pre.value && pre.value.status === 'published') {
+          const re = await approveProject(store, id);
+          if (!re.ok) return sendJson(res, 400, { ok: false, error: re.error });
+        }
         console.log('  → publish: scan + deploy su Cloudflare… (recapito form: ' + (deliveryActive ? 'attivo' : 'NON attivo') + ')');
         const t0 = Date.now();
         const r = await withTimeout(
           publishProject({ store, id, scanner, host }),
-          180_000,
-          'La pubblicazione ha superato i 3 minuti ed e stata interrotta.',
+          300_000,
+          'La pubblicazione ha superato il tempo massimo ed e stata interrotta.',
         );
         if (!r.ok) {
           console.log('  ✗ publish:', r.error.code, r.error.message);

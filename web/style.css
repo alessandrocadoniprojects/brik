@@ -91,6 +91,25 @@ body {
 .msg li { margin: 2px 0; }
 .msg .tiny { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); letter-spacing: .04em; }
 .msg.thinking { color: var(--ink-soft); font-style: italic; }
+
+/* intake (domande di chiarimento) */
+.intake .q-block { margin: 12px 0; }
+.intake .q { font-weight: 600; margin: 0 0 6px; }
+.intake .opts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.intake .opt {
+  font-family: var(--sans); font-size: 12px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+  border-radius: 999px; padding: 5px 11px;
+}
+.intake .opt:hover { border-color: var(--ink); }
+.intake .opt.sel { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.intake .q-text {
+  width: 100%; font-family: var(--sans); font-size: 13px; color: var(--ink);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--paper);
+}
+.intake .q-text:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.intake .build-btn { margin-top: 8px; }
+.intake button:disabled, .intake input:disabled { opacity: .55; cursor: default; }
 .dotting::after { content: ""; animation: dots 1.2s steps(4, end) infinite; }
 @keyframes dots { 0% { content: ""; } 25% { content: "·"; } 50% { content: "··"; } 75% { content: "···"; } }
 
@@ -138,6 +157,8 @@ body {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 24px;
 }
+/* l'attributo `hidden` deve vincere su display:flex qui sopra */
+.placeholder[hidden], .busy[hidden], #frame[hidden] { display: none !important; }
 .busy { background: rgba(244,241,234,.86); backdrop-filter: blur(2px); }
 .ph-inner { color: var(--ink-soft); }
 .ph-mark { font-family: var(--serif); font-style: italic; font-size: 44px; color: var(--line); display: block; }
