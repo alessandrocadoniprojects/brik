@@ -86,7 +86,10 @@ if (cmd === 'approve') {
 if (cmd === 'publish') {
   const host = process.env.CLOUDFLARE_API_TOKEN ? makeCloudflarePagesHost() : undefined;
   if (!host) console.log('(Nessun CLOUDFLARE_API_TOKEN nel .env: pubblico solo in locale, senza URL online.)');
-  const r = await publishProject({ store, id, scanner: makeBasicSecurityScanner(), host });
+  // L'allowlist dei form = SOLO l'endpoint di recapito che abbiamo configurato noi.
+  const delivery = process.env.WEB3FORMS_ACCESS_KEY ? makeWeb3FormsDelivery() : undefined;
+  const allowedFormHosts = delivery ? [delivery.describe({ siteId: id }).endpointHost].filter((h) => h) : [];
+  const r = await publishProject({ store, id, scanner: makeBasicSecurityScanner({ allowedFormHosts }), host });
   if (!r.ok) { console.error(r.error.message); process.exit(1); }
   if (!r.value.published) {
     console.log('PUBBLICAZIONE BLOCCATA dal gate di sicurezza:');

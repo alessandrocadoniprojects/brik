@@ -62,11 +62,13 @@ const RULES: readonly Rule[] = [
   { severity: 'high', code: 'NEW_FUNCTION', message: 'Uso di new Function()', re: /\bnew\s+Function\s*\(/g },
   { severity: 'medium', code: 'DOC_WRITE', message: 'Uso di document.write()', re: /\bdocument\.write\s*\(/g },
   { severity: 'low', code: 'JS_URL', message: 'URL javascript: in un attributo', re: /\b(?:href|src)\s*=\s*["']javascript:/gi },
-  // --- esfiltrazione via form ---
-  { severity: 'medium', code: 'FORM_EXT_ACTION', message: 'Form che invia dati a un dominio esterno', re: /<form\b[^>]*\baction\s*=\s*["']https?:\/\//gi },
 ];
 
-export function makeBasicSecurityScanner(): SecurityScanner {
+/** Cattura l'URL d'azione dei form (POST verso domini esterni). */
+const FORM_ACTION_RE = /<form\b[^>]*\baction\s*=\s*["'](https?:\/\/[^"']+)["']/gi;
+
+export function makeBasicSecurityScanner(opts: { readonly allowedFormHosts?: readonly string[] } = {}): SecurityScanner {
+  const allowed = new Set((opts.allowedFormHosts ?? []).map((h) => h.toLowerCase()));
   return {
     scan(html) {
       const findings: Finding[] = [];
@@ -76,6 +78,22 @@ export function makeBasicSecurityScanner(): SecurityScanner {
         const kept = rule.ignoreIf ? matches.filter((m) => !rule.ignoreIf!.test(m)) : matches;
         if (kept.length === 0) continue;
         findings.push({ severity: rule.severity, code: rule.code, message: rule.message, count: kept.length });
+      }
+      // Form con action esterna: bloccati SOLO se l'host non e nell'allowlist di recapito.
+      let badForms = 0;
+      FORM_ACTION_RE.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = FORM_ACTION_RE.exec(html)) !== null) {
+        let host = '';
+        try {
+          host = new URL(m[1] as string).host.toLowerCase();
+        } catch {
+          host = '';
+        }
+        if (!host || !allowed.has(host)) badForms += 1;
+      }
+      if (badForms > 0) {
+        findings.push({ severity: 'medium', code: 'FORM_EXT_ACTION', message: 'Form che invia dati a un dominio esterno non consentito', count: badForms });
       }
       const blocked = findings.some((f) => f.severity === 'high' || f.severity === 'medium');
       return { findings, blocked };
