@@ -14,7 +14,7 @@ import { writeFile } from 'node:fs/promises';
 
 import { ok, type Result, type ProjectSpec, type SitePage, type QaReport } from '../src/core/index.js';
 import { makeBasicSecurityScanner } from '../src/security/scanner.js';
-import { planSite } from '../src/intake/sitePlanner.js';
+import { planSite, extractQuoted, pickConfirmation, extractLabeledLists } from '../src/intake/sitePlanner.js';
 import { makeFileSiteStore } from '../src/project/siteStore.js';
 import { scanSite } from '../src/project/site.js';
 import {
@@ -36,8 +36,9 @@ const mockClassifier = {
   async classify(statement: string) {
     if (/^link/i.test(statement)) return ok({ kind: 'navigation', fromRoute: '/', linkText: 'X', toRoutePattern: '/x' } as const);
     if (/form/i.test(statement)) {
-      const conf = statement.match(/"([^"]+)"/)?.[1] ?? 'Inviato';
-      return ok({ kind: 'form-submission', route: '/', fields: [{ label: 'Nome', value: 'x' }, { label: 'Email', value: 'y' }], expect: 'confirmation-visible', confirmationText: conf } as const);
+      // conferma volutamente GENERICA: la garanzia deterministica del pianificatore
+      // deve sovrascriverla col testo esatto citato nella frase.
+      return ok({ kind: 'form-submission', route: '/', fields: [{ label: 'Nome', value: 'x' }, { label: 'Email', value: 'y' }], expect: 'confirmation-visible', confirmationText: 'Inviato con successo' } as const);
     }
     const text = statement.match(/"([^"]+)"/)?.[1] ?? statement;
     return ok({ kind: 'content-present', route: '/', text } as const);
@@ -140,6 +141,64 @@ test('pianificatore: route riscritte, un form per pagina, nav automatica, nav-da
   assert.equal(navs[0]!.kind === 'navigation' && navs[0]!.fromRoute, '/');
   // home garantita
   assert.ok(r.value.routes.some((rt) => rt.route === '/'));
+});
+
+test('parser quote: doppie/curve/singole, ignora apostrofi', () => {
+  assert.deepEqual(extractQuoted('slogan "La vera pizza" e titolo \u201cBenvenuti\u201d'), ['La vera pizza', 'Benvenuti']);
+  assert.deepEqual(extractQuoted("conferma 'Grazie, a presto'"), ['Grazie, a presto']);
+  // l'apostrofo NON apre una virgoletta
+  assert.deepEqual(extractQuoted("il sito dell'azienda mostra 'Da Ciro'"), ['Da Ciro']);
+});
+
+test('parser conferma: sceglie la stringa vicino alla parola-spia', () => {
+  assert.equal(pickConfirmation('form con nome ed email che mostra "Prenotazione ricevuta"'), 'Prenotazione ricevuta');
+  // due quote: prende quella dopo la spia "mostra", non l'ultima
+  assert.equal(pickConfirmation('titolo "Prenota ora", il form mostra "Fatto!" dopo invio'), 'Fatto!');
+  assert.equal(pickConfirmation('form senza messaggio'), undefined);
+});
+
+test('parser elenchi: esplode "menu (a, b, c)", salta i campi del form', () => {
+  const pages = [{ route: '/', label: 'Home' }, { route: '/menu', label: 'Menu' }, { route: '/contatti', label: 'Contatti' }];
+  const got = extractLabeledLists('home; pagina menu (Margherita, Marinara, Diavola); contatti con form (nome, email, messaggio)', pages);
+  const menu = got.filter((g) => g.route === '/menu').map((g) => g.text);
+  assert.deepEqual(menu.sort(), ['Diavola', 'Margherita', 'Marinara']);
+  // i campi del form NON diventano contenuti
+  assert.equal(got.some((g) => /nome|email|messaggio/i.test(g.text)), false);
+});
+
+test('parser elenchi: lista dopo i due punti', () => {
+  const pages = [{ route: '/', label: 'Home' }, { route: '/servizi', label: 'Servizi' }];
+  const got = extractLabeledLists('servizi: taglio, piega, colore', pages);
+  assert.deepEqual(got.filter((g) => g.route === '/servizi').map((g) => g.text).sort(), ['colore', 'piega', 'taglio']);
+});
+
+test('fedelta end-to-end: pianificatore pigro, ma voci/conferma/slogan vengono recuperati', async () => {
+  const description = "Pizzeria 'Da Ciro': home con slogan 'La vera pizza napoletana', pagina menu (Margherita, Marinara, Diavola), pagina contatti con form (nome, email, messaggio) che conferma 'Grazie, a presto'";
+  // il pianificatore "pigro" perde Marinara/Diavola e mette una conferma sbagliata via classificatore
+  const lazyPlan = JSON.stringify({
+    title: 'Da Ciro',
+    category: 'business-landing',
+    pages: [
+      { route: '/', label: 'Home', statements: ['Mostra "La vera pizza napoletana"'] },
+      { route: '/menu', label: 'Menu', statements: ['Mostra "Margherita"'] },
+      { route: '/contatti', label: 'Contatti', statements: ['Form con nome, email, messaggio che conferma "Grazie, a presto"'] },
+    ],
+  });
+  const r = await planSite({ id: 'daciro', ownerId: 'o', description, llm: mockLlm(lazyPlan), classifier: mockClassifier });
+  assert.ok(r.ok, 'plan ok');
+  const C = r.value.spec.criteria;
+  const contentOn = (route: string) => C.filter((c) => c.check?.kind === 'content-present' && c.check.route === route).map((c) => (c.check as { text: string }).text);
+
+  // tutte e tre le pizze recuperate su /menu
+  const menu = contentOn('/menu');
+  for (const pizza of ['Margherita', 'Marinara', 'Diavola']) assert.ok(menu.includes(pizza), 'manca ' + pizza);
+  // slogan verbatim sulla home
+  assert.ok(contentOn('/').includes('La vera pizza napoletana'), 'slogan perso');
+  // conferma del form ESATTA (non quella generica del classificatore)
+  const form = C.find((c) => c.check?.kind === 'form-submission');
+  assert.ok(form && form.check?.kind === 'form-submission' && form.check.confirmationText === 'Grazie, a presto', 'conferma non esatta');
+  // la conferma NON e finita come content-present (comparirebbe solo dopo invio)
+  assert.equal(C.some((c) => c.check?.kind === 'content-present' && (c.check as { text: string }).text === 'Grazie, a presto'), false);
 });
 
 test('store: roundtrip + migrazione v1(html) -> v2(pages)', async () => {
