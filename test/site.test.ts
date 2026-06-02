@@ -24,6 +24,7 @@ import {
   approveProject,
   publishProject,
   revertProject,
+  updateProjectRequirements,
   type QaForSite,
 } from '../src/project/siteSession.js';
 import type { SiteGenerator, RouteInfo } from '../src/adapters/anthropic/siteGenerator.js';
@@ -289,6 +290,34 @@ test('ciclo di vita multi-pagina: crea -> modifica(accetta) -> modifica(rifiuta)
   const p2 = await publishProject({ store, id: 'site1', scanner });
   assert.ok(p2.ok && p2.value.published, 'pubblicazione ok dopo revert');
   assert.equal(p2.value.state.status, 'published');
+});
+
+test('updateProjectRequirements: ripianifica, sostituisce le pagine e versiona', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'brik-upd-'));
+  const store = makeFileSiteStore(dir);
+  const generator = mockGenerator();
+
+  const planA = JSON.stringify({ title: 'Studio', category: 'business-landing', pages: [
+    { route: '/', label: 'Home', statements: ['Titolo "Studio Verde"'] },
+    { route: '/contatti', label: 'Contatti', statements: ['Form con nome che mostra "Grazie" dopo invio'] },
+  ] });
+  const created = await createProject({ store, id: 's', ownerId: 'o', description: 'd', llm: mockLlm(planA), classifier: mockClassifier, generator, runQa: mockQa });
+  assert.ok(created.ok && created.value.state.routes.length === 2);
+
+  const planB = JSON.stringify({ title: 'Studio', category: 'business-landing', pages: [
+    { route: '/', label: 'Home', statements: ['Titolo "Studio Verde"'] },
+    { route: '/servizi', label: 'Servizi', statements: ['Mostra "Consulenza"'] },
+  ] });
+  const upd = await updateProjectRequirements({ store, id: 's', newDescription: 'servizi: consulenza, audit', llm: mockLlm(planB), classifier: mockClassifier, generator, runQa: mockQa });
+  assert.ok(upd.ok, 'update ok');
+  assert.equal(upd.value.report.buildSucceeded, true);
+
+  const after = await getProject(store, 's');
+  assert.ok(after.ok && after.value);
+  assert.equal(after.value!.version, 2, 'versione incrementata');
+  assert.deepEqual(after.value!.routes.map((r) => r.route).sort(), ['/', '/servizi'], 'route sostituite');
+  assert.equal(after.value!.pages.some((p) => p.route === '/contatti'), false, '/contatti rimossa');
+  assert.equal(after.value!.status, 'preview');
 });
 
 test('createProject: rifiuta id gia esistente', async () => {
