@@ -477,3 +477,63 @@ test('publishProject: con host pubblica e salva URL; con host che fallisce resta
   assert.equal(pok.value.state.url, 'https://h.pages.dev');
   assert.equal(pok.value.state.status, 'published');
 });
+
+/* ----------------------------- form di contatto deterministico ----------------------------- */
+
+import { buildContactForm, injectForms, deInjectForms, CONTACT_MARKER } from '../src/project/forms.js';
+import { makeWeb3FormsDelivery } from '../src/adapters/forms/web3forms.js';
+
+const formSpec = {
+  id: 's', ownerId: 'o', category: 'business-landing' as const, title: 'Studio', description: 'd',
+  criteria: [
+    { id: 'c1', statement: 'Mostra "Benvenuti"', confirmed: true, check: { kind: 'content-present' as const, route: '/', text: 'Benvenuti' } },
+    { id: 'c2', statement: 'Form', confirmed: true, check: { kind: 'form-submission' as const, route: '/contatti', fields: [{ label: 'Nome', value: 'x' }, { label: 'Email', value: 'y' }, { label: 'Messaggio', value: 'z' }], expect: 'confirmation-visible' as const, confirmationText: 'Grazie, a presto' } },
+  ],
+};
+
+test('web3forms: con chiave fornisce action e access_key; senza chiave fallback statico', () => {
+  const withKey = makeWeb3FormsDelivery({ accessKey: 'abc' }).describe({ siteId: 's', subject: 'Studio' });
+  assert.equal(withKey.action, 'https://api.web3forms.com/submit');
+  assert.equal(withKey.hiddenFields.access_key, 'abc');
+  const noKey = makeWeb3FormsDelivery({}).describe({ siteId: 's' });
+  assert.equal(noKey.action, '#');
+});
+
+test('buildContactForm: campi, conferma nascosta, recapito e niente invio sotto automazione', () => {
+  const d = makeWeb3FormsDelivery({ accessKey: 'abc' }).describe({ siteId: 's', subject: 'Studio' });
+  const html = buildContactForm(formSpec.criteria[1]!.check!.kind === 'form-submission' ? (formSpec.criteria[1]!.check as { fields: { label: string }[] }).fields : [], 'Grazie, a presto', d);
+  assert.match(html, /name="access_key" value="abc"/);
+  assert.match(html, /type="email"/);
+  assert.match(html, /<textarea/);
+  assert.match(html, /data-brik-confirm[^>]*hidden>Grazie, a presto</);
+  assert.match(html, /navigator\.webdriver/); // QA non invia davvero
+  assert.match(html, /action="https:\/\/api\.web3forms\.com\/submit"/);
+});
+
+test('injectForms: sostituisce il segnaposto con un form reale sulla pagina del criterio', () => {
+  const pages = [
+    { route: '/', html: '<html><body><h1>Benvenuti</h1></body></html>' },
+    { route: '/contatti', html: `<html><body><h1>Contatti</h1>${CONTACT_MARKER}</body></html>` },
+  ];
+  const d = makeWeb3FormsDelivery({ accessKey: 'abc' }).describe({ siteId: 's' });
+  const out = injectForms(pages, formSpec, d);
+  assert.equal(out[0]!.html.includes('brik-contact'), false, 'home invariata');
+  assert.match(out[1]!.html, /id="brik-contact"/);
+  assert.equal(out[1]!.html.includes(CONTACT_MARKER), false, 'segnaposto consumato');
+  assert.match(out[1]!.html, /Grazie, a presto/);
+});
+
+test('injectForms: idempotente + de-iniezione riporta al segnaposto', () => {
+  const d = makeWeb3FormsDelivery({ accessKey: 'abc' }).describe({ siteId: 's' });
+  const once = injectForms([{ route: '/contatti', html: `X${CONTACT_MARKER}Y` }], formSpec, d);
+  const twice = injectForms(once, formSpec, d);
+  assert.equal(once[0]!.html, twice[0]!.html, 're-iniezione stabile');
+  const back = deInjectForms(twice);
+  assert.match(back[0]!.html, /X<!--BRIK_CONTACT_FORM-->Y/);
+  assert.equal(back[0]!.html.includes('brik-contact'), false);
+});
+
+test('injectForms: segnaposto senza criterio viene rimosso', () => {
+  const out = injectForms([{ route: '/', html: `A${CONTACT_MARKER}B` }], formSpec); // / non ha form
+  assert.equal(out[0]!.html, 'AB');
+});

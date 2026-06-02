@@ -19,6 +19,8 @@ import {
   err,
   appError,
 } from '@core';
+import type { FormDelivery } from '@core';
+import { injectForms, deInjectForms } from '../../project/forms.js';
 
 /** Percorso + etichetta del menu per una pagina. */
 export type RouteInfo = SiteRoute;
@@ -45,6 +47,7 @@ const SYSTEM = [
   'TUTTE le pagine condividono la STESSA intestazione con un menu di navigazione che collega OGNI pagina usando ESATTAMENTE i percorsi indicati negli href (es. <a href="/contatti">). Stesso stile e stesso footer ovunque.',
   'Ogni pagina e UNA sola schermata scrollabile: niente tab o sezioni nascoste via JavaScript.',
   'Metti ogni contenuto nella SUA pagina e usa i testi ESATTI dove indicato.',
+  'NON scrivere mai un form di contatto/prenotazione: dove un form deve apparire, inserisci ESATTAMENTE il commento <!--BRIK_CONTACT_FORM--> e NIENT\'ALTRO per quel form (niente <form>, campi o JS). Lo costruisce il sistema.',
   'FORMATO OBBLIGATORIO: per ogni pagina una riga con il delimitatore esatto "<<<FILE {percorso}>>>" (es. "<<<FILE /contatti>>>") e SUBITO SOTTO il codice HTML completo della pagina. Nessun altro testo, nessun markdown.',
 ].join('\n');
 
@@ -60,9 +63,7 @@ function requirementsByRoute(spec: ProjectSpec, routes: readonly RouteInfo[]): s
       else if (k.kind === 'responsive' && k.route === route) lines.push('- Usabile su mobile (375px) senza overflow orizzontale.');
       else if (k.kind === 'form-submission' && k.route === route) {
         const fl = k.fields.map((f) => `"${f.label}"`).join(', ');
-        lines.push(
-          `- Un <form> con i campi ${fl} (ognuno con <label for> associata). Con JS inline, al submit: event.preventDefault() e mostra (rendendolo visibile) il messaggio con testo ESATTO "${k.confirmationText}".`,
-        );
+        lines.push(`- Un form di contatto con i campi ${fl}: inserisci ESATTAMENTE il segnaposto <!--BRIK_CONTACT_FORM--> dove deve apparire (lo costruisce il sistema, non scriverlo tu).`);
       } else if (k.kind === 'navigation' && k.fromRoute === route) {
         lines.push(`- Un link con testo "${k.linkText}" che punta a "${k.toRoutePattern}".`);
       }
@@ -115,10 +116,16 @@ function delimited(pages: readonly SitePage[]): string {
 
 export function makeAnthropicSiteGenerator(
   llm: LLMProvider,
-  opts: { readonly tier?: LLMRequest['tier'] } = {},
+  opts: { readonly tier?: LLMRequest['tier']; readonly delivery?: FormDelivery } = {},
 ): SiteGenerator {
   const tier = opts.tier ?? 'balanced';
   const expectedRoutes = (routes: readonly RouteInfo[]) => routes.map((r) => r.route);
+  const finish = (raw: string, spec: ProjectSpec, routes: readonly RouteInfo[]): Result<SitePage[]> => {
+    const parsed = parseSite(raw, expectedRoutes(routes));
+    if (!parsed.ok) return parsed;
+    const descriptor = opts.delivery?.describe({ siteId: spec.id, subject: spec.title });
+    return ok(injectForms(parsed.value, spec, descriptor));
+  };
 
   return {
     async generate(spec, routes) {
@@ -135,7 +142,7 @@ export function makeAnthropicSiteGenerator(
 
       const res = await llm.complete({ system: SYSTEM, prompt, tier, maxTokens: 16000 });
       if (!res.ok) return err(res.error);
-      return parseSite(res.value.text, expectedRoutes(routes));
+      return finish(res.value.text, spec, routes);
     },
 
     async fix(spec, routes, current, failures) {
@@ -151,12 +158,12 @@ export function makeAnthropicSiteGenerator(
         failures.map((f) => `- [${f.kind}] ${f.detail}`).join('\n'),
         '',
         'PAGINE ATTUALI:',
-        delimited(current),
+        delimited(deInjectForms(current)),
       ].join('\n');
 
       const res = await llm.complete({ system, prompt, tier, maxTokens: 16000 });
       if (!res.ok) return err(res.error);
-      return parseSite(res.value.text, expectedRoutes(routes));
+      return finish(res.value.text, spec, routes);
     },
 
     async edit(spec, routes, current, instruction) {
@@ -172,12 +179,12 @@ export function makeAnthropicSiteGenerator(
         instruction,
         '',
         'PAGINE ATTUALI:',
-        delimited(current),
+        delimited(deInjectForms(current)),
       ].join('\n');
 
       const res = await llm.complete({ system, prompt, tier, maxTokens: 16000 });
       if (!res.ok) return err(res.error);
-      return parseSite(res.value.text, expectedRoutes(routes));
+      return finish(res.value.text, spec, routes);
     },
   };
 }

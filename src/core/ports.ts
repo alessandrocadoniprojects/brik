@@ -73,6 +73,22 @@ export interface SiteDeployResult {
   readonly deployId?: string;
 }
 
+/**
+ * Recapito dei form di un sito statico (il sito non ha backend).
+ * L'adapter fornisce dove il form fa POST e i campi nascosti necessari.
+ * Adapter: Web3Forms (default), in futuro Cloudflare Functions+Resend, mock.
+ */
+export interface FormDelivery {
+  describe(opts: { readonly siteId: string; readonly subject?: string }): FormDeliveryDescriptor;
+}
+
+export interface FormDeliveryDescriptor {
+  readonly action: string; // URL a cui il form invia (POST); "#" = nessun recapito (solo conferma)
+  readonly method: 'POST';
+  readonly hiddenFields: Readonly<Record<string, string>>;
+  readonly endpointHost: string; // host esterno coinvolto (utile per eventuale intercettazione QA)
+}
+
 /** Persistenza dei progetti. Adapter: Supabase, in-memory (mock). */
 export interface ProjectStore {
   save(spec: ProjectSpec): Promise<Result<void>>;

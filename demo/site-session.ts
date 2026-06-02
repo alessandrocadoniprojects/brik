@@ -17,6 +17,7 @@ import type { AddressInfo } from 'node:net';
 import { chromium } from 'playwright';
 import { makeAnthropicLLM } from '../src/adapters/index.js';
 import { makeAnthropicSiteGenerator } from '../src/adapters/anthropic/siteGenerator.js';
+import { makeWeb3FormsDelivery } from '../src/adapters/forms/web3forms.js';
 import { makeAnthropicClassifier } from '../src/intake/index.js';
 import { makePlaywrightQaRunner } from '../src/qa/playwrightRunner.js';
 import { makeBasicSecurityScanner } from '../src/security/scanner.js';
@@ -110,7 +111,7 @@ if (cmd === 'revert') {
 // comandi con QA (server + browser)
 const llm = makeAnthropicLLM({ apiKey: key });
 const classifier = makeAnthropicClassifier({ apiKey: key });
-const generator = makeAnthropicSiteGenerator(llm);
+const generator = makeAnthropicSiteGenerator(llm, { delivery: process.env.WEB3FORMS_ACCESS_KEY ? makeWeb3FormsDelivery() : undefined });
 
 const pagesMap = new Map<string, string>();
 const server = createServer((req, res) => {
