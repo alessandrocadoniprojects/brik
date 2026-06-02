@@ -20,6 +20,7 @@ import { makeAnthropicSiteGenerator } from '../src/adapters/anthropic/siteGenera
 import { makeAnthropicClassifier } from '../src/intake/index.js';
 import { makePlaywrightQaRunner } from '../src/qa/playwrightRunner.js';
 import { makeBasicSecurityScanner } from '../src/security/scanner.js';
+import { makeCloudflarePagesHost } from '../src/adapters/hosting/cloudflarePages.js';
 import { makeFileSiteStore } from '../src/project/siteStore.js';
 import { summarizeSite } from '../src/project/site.js';
 import {
@@ -82,7 +83,9 @@ if (cmd === 'approve') {
   process.exit(0);
 }
 if (cmd === 'publish') {
-  const r = await publishProject({ store, id, scanner: makeBasicSecurityScanner() });
+  const host = process.env.CLOUDFLARE_API_TOKEN ? makeCloudflarePagesHost() : undefined;
+  if (!host) console.log('(Nessun CLOUDFLARE_API_TOKEN nel .env: pubblico solo in locale, senza URL online.)');
+  const r = await publishProject({ store, id, scanner: makeBasicSecurityScanner(), host });
   if (!r.ok) { console.error(r.error.message); process.exit(1); }
   if (!r.value.published) {
     console.log('PUBBLICAZIONE BLOCCATA dal gate di sicurezza:');
@@ -91,6 +94,7 @@ if (cmd === 'publish') {
   }
   writePages(r.value.state);
   console.log('PUBBLICATO (versione ' + r.value.state.version + ', ' + r.value.state.publishedAt + ').');
+  if (r.value.state.url) console.log('Online: ' + r.value.state.url);
   console.log('Pagine in demo/sites/' + id + '/');
   process.exit(0);
 }

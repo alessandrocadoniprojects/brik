@@ -13,6 +13,7 @@ import {
   type QaReport,
   type IntakeClassifier,
   type LLMProvider,
+  type SiteHostingProvider,
   type Result,
   ok,
   err,
@@ -211,6 +212,7 @@ export async function publishProject(args: {
   readonly store: SiteStore;
   readonly id: string;
   readonly scanner: SecurityScanner;
+  readonly host?: SiteHostingProvider;
 }): Promise<Result<{ published: boolean; state: SiteState; report: SiteScanReport }>> {
   const f = await args.store.load(args.id);
   if (!f.ok) return err(f.error);
@@ -222,7 +224,15 @@ export async function publishProject(args: {
   const report = scanSite(cur.pages, args.scanner);
   if (report.blocked) return ok({ published: false, state: cur, report });
 
-  const state: SiteState = { ...cur, status: 'published', updatedAt: now(), publishedAt: now() };
+  // Deploy sull'host (se configurato), poi marca pubblicato con l'URL live.
+  let url = cur.url;
+  if (args.host) {
+    const deployed = await args.host.deploy({ siteId: cur.id, pages: cur.pages });
+    if (!deployed.ok) return err(deployed.error);
+    url = deployed.value.url;
+  }
+
+  const state: SiteState = { ...cur, status: 'published', updatedAt: now(), publishedAt: now(), ...(url ? { url } : {}) };
   const saved = await args.store.save({ ...f.value, state });
   if (!saved.ok) return err(saved.error);
   return ok({ published: true, state, report });

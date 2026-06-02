@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 
-import { ok, type Result, type ProjectSpec, type SitePage, type QaReport } from '../src/core/index.js';
+import { ok, err, appError, type Result, type ProjectSpec, type SitePage, type QaReport } from '../src/core/index.js';
 import { makeBasicSecurityScanner } from '../src/security/scanner.js';
 import { planSite, extractQuoted, pickConfirmation, extractLabeledLists } from '../src/intake/sitePlanner.js';
 import { makeFileSiteStore } from '../src/project/siteStore.js';
@@ -424,4 +424,56 @@ test('editProject: una modifica che NON ottiene il criterio richiesto viene RIFI
   assert.ok(after.ok && after.value);
   assert.equal(contentTexts(after.value!.spec.criteria, '/menu').includes('Capricciosa'), false, 'contratto NON modificato');
   assert.equal(after.value!.version, 1, 'versione invariata');
+});
+
+/* ----------------------------- hosting ----------------------------- */
+
+import { makeCloudflarePagesHost, sanitizeProjectName, layoutFiles } from '../src/adapters/hosting/cloudflarePages.js';
+import type { SiteHostingProvider } from '../src/core/index.js';
+
+test('hosting: nome progetto Cloudflare valido', () => {
+  assert.equal(sanitizeProjectName("Pizzeria 'Da Ciro'!"), 'pizzeria-da-ciro');
+  assert.equal(sanitizeProjectName('  ---  '), 'sito');
+  assert.ok(sanitizeProjectName('x'.repeat(80)).length <= 58);
+});
+
+test('hosting: layout a cartelle (/, /menu -> menu/index.html)', () => {
+  const files = layoutFiles([{ route: '/', html: 'H' }, { route: '/menu', html: 'M' }]);
+  assert.deepEqual(files.map((f) => f.path).sort(), ['index.html', 'menu/index.html']);
+});
+
+test('hosting: senza credenziali la deploy fallisce con messaggio chiaro', async () => {
+  const host = makeCloudflarePagesHost({}); // nessun token/account
+  const r = await host.deploy({ siteId: 's', pages: [{ route: '/', html: 'x' }] });
+  assert.ok(!r.ok && r.error.code === 'HOSTING_NOT_CONFIGURED');
+});
+
+test('hosting: runner mockato -> deploy ok, URL stabile', async () => {
+  const host = makeCloudflarePagesHost({ apiToken: 't', accountId: 'a', runner: async () => ok('Deployment complete https://abc123.pizzeria.pages.dev') });
+  const r = await host.deploy({ siteId: 'pizzeria', pages: [{ route: '/', html: 'x' }] });
+  assert.ok(r.ok && r.value.url === 'https://pizzeria.pages.dev');
+});
+
+test('publishProject: con host pubblica e salva URL; con host che fallisce resta approvato', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'brik-host-'));
+  const store = makeFileSiteStore(dir);
+  const generator = mockGenerator();
+  const planA = JSON.stringify({ title: 'Studio', category: 'business-landing', pages: [{ route: '/', label: 'Home', statements: ['Titolo "Studio"'] }] });
+  const created = await createProject({ store, id: 'h', ownerId: 'o', description: 'd', llm: mockLlm(planA), classifier: mockClassifier, generator, runQa: mockQa });
+  assert.ok(created.ok);
+  await approveProject(store, 'h');
+
+  // host che FALLISCE -> publish ritorna errore, lo stato resta approved
+  const failHost: SiteHostingProvider = { async deploy() { return err(appError('HOSTING_DEPLOY_FAILED', 'boom')); } };
+  const pf = await publishProject({ store, id: 'h', scanner: makeBasicSecurityScanner(), host: failHost });
+  assert.ok(!pf.ok, 'publish fallisce se il deploy fallisce');
+  const stillApproved = await getProject(store, 'h');
+  assert.equal(stillApproved.ok && stillApproved.value!.status, 'approved', 'non risulta pubblicato');
+
+  // host che funziona -> published con URL
+  const okHost: SiteHostingProvider = { async deploy() { return ok({ url: 'https://h.pages.dev' }); } };
+  const pok = await publishProject({ store, id: 'h', scanner: makeBasicSecurityScanner(), host: okHost });
+  assert.ok(pok.ok && pok.value.published);
+  assert.equal(pok.value.state.url, 'https://h.pages.dev');
+  assert.equal(pok.value.state.status, 'published');
 });

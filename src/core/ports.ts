@@ -17,6 +17,7 @@ import type {
   GeneratedProject,
   BuildArtifact,
   DeployResult,
+  SitePage,
 } from './domain.js';
 
 /** Accesso grezzo a un modello (testo→testo). Adapter: Anthropic, mock, ... */
@@ -57,6 +58,19 @@ export interface HostingProvider {
 export interface DeployOptions {
   /** Sottodominio richiesto (univoco per progetto). */
   readonly subdomain: string;
+}
+
+/**
+ * Pubblica un sito statico multi-pagina (insieme di pagine) e ritorna l'URL live.
+ * Adapter: Cloudflare Pages (default), Vercel, Netlify, mock.
+ */
+export interface SiteHostingProvider {
+  deploy(input: { readonly siteId: string; readonly pages: readonly SitePage[] }): Promise<Result<SiteDeployResult>>;
+}
+
+export interface SiteDeployResult {
+  readonly url: string;
+  readonly deployId?: string;
 }
 
 /** Persistenza dei progetti. Adapter: Supabase, in-memory (mock). */
