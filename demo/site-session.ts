@@ -143,14 +143,15 @@ try {
   } else if (cmd === 'edit') {
     const instruction = process.argv.slice(4).join(' ');
     if (!instruction) { console.error('edit "<istruzione>"'); process.exit(1); }
-    const r = await editProject({ store, id, instruction, generator, runQa });
+    const r = await editProject({ store, id, instruction, llm, generator, runQa });
     if (!r.ok) { console.error('edit: ' + r.error.message); process.exit(1); }
     if (r.value.accepted) {
       writePages(r.value.state);
       console.log('MODIFICA APPLICATA (versione ' + r.value.state.version + ').');
+      if (r.value.changes.length) console.log('Contratto aggiornato: ' + r.value.changes.join('; '));
       printState(r.value.state);
     } else {
-      console.log('MODIFICA RIFIUTATA — conflitti col contratto:');
+      console.log('MODIFICA RIFIUTATA — non ottiene o rompe il contratto:');
       for (const c of r.value.conflicts) console.log('  - [' + c.kind + '] ' + c.detail);
     }
   } else {

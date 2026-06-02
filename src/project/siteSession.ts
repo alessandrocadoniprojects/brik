@@ -19,6 +19,7 @@ import {
   appError,
 } from '@core';
 import { planSite } from '../intake/sitePlanner.js';
+import { planEdit } from '../intake/editPlanner.js';
 import { repairSite } from '../orchestrator/repairSite.js';
 import type { SiteGenerator } from '../adapters/anthropic/siteGenerator.js';
 import type { EditConflict } from '../orchestrator/edit.js';
@@ -100,18 +101,25 @@ export async function editProject(args: {
   readonly store: SiteStore;
   readonly id: string;
   readonly instruction: string;
+  readonly llm: LLMProvider;
   readonly generator: SiteGenerator;
   readonly runQa: QaForSite;
-}): Promise<Result<{ accepted: boolean; state: SiteState; conflicts: readonly EditConflict[] }>> {
+}): Promise<Result<{ accepted: boolean; state: SiteState; conflicts: readonly EditConflict[]; changes: readonly string[] }>> {
   const f = await args.store.load(args.id);
   if (!f.ok) return err(f.error);
   if (!f.value) return err(notFound(args.id));
   const cur = f.value.state;
 
-  const edited = await args.generator.edit(cur.spec, cur.routes, cur.pages, args.instruction);
+  // 1) Dall'istruzione ricava il contratto AGGIORNATO (aggiungi/cambia/rimuovi).
+  const plan = await planEdit({ instruction: args.instruction, spec: cur.spec, routes: cur.routes, llm: args.llm });
+  if (!plan.ok) return err(plan.error);
+  const newSpec: ProjectSpec = { ...cur.spec, criteria: [...plan.value.criteria] };
+
+  // 2) Rigenera applicando la modifica, poi VERIFICA contro il contratto nuovo.
+  const edited = await args.generator.edit(newSpec, cur.routes, cur.pages, args.instruction);
   if (!edited.ok) return err(edited.error);
 
-  const qa = await args.runQa(edited.value, cur.spec);
+  const qa = await args.runQa(edited.value, newSpec);
   if (!qa.ok) return err(qa.error);
   const report = qa.value;
 
@@ -119,14 +127,22 @@ export async function editProject(args: {
     const conflicts: EditConflict[] = [...report.level1, ...report.level2]
       .filter((r) => !r.passed)
       .map((r) => ({ criterionId: r.criterionId, kind: r.kind, detail: r.detail ?? 'check fallito' }));
-    return ok({ accepted: false, state: cur, conflicts });
+    return ok({ accepted: false, state: cur, conflicts, changes: plan.value.changes });
   }
 
   const history = pushHistory(f.value.history, cur, 'modifica: ' + args.instruction);
-  const state: SiteState = { ...cur, pages: edited.value, status: 'preview', version: cur.version + 1, updatedAt: now() };
+  const state: SiteState = {
+    ...cur,
+    spec: newSpec,
+    statements: newSpec.criteria.map((c) => c.statement),
+    pages: edited.value,
+    status: 'preview',
+    version: cur.version + 1,
+    updatedAt: now(),
+  };
   const saved = await args.store.save({ ...f.value, state, history });
   if (!saved.ok) return err(saved.error);
-  return ok({ accepted: true, state, conflicts: [] });
+  return ok({ accepted: true, state, conflicts: [], changes: plan.value.changes });
 }
 
 export async function updateProjectRequirements(args: {

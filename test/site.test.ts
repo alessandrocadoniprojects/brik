@@ -16,7 +16,8 @@ import { ok, type Result, type ProjectSpec, type SitePage, type QaReport } from 
 import { makeBasicSecurityScanner } from '../src/security/scanner.js';
 import { planSite, extractQuoted, pickConfirmation, extractLabeledLists } from '../src/intake/sitePlanner.js';
 import { makeFileSiteStore } from '../src/project/siteStore.js';
-import { scanSite } from '../src/project/site.js';
+import { scanSite, summarizeSite } from '../src/project/site.js';
+import { planEdit } from '../src/intake/editPlanner.js';
 import {
   createProject,
   getProject,
@@ -71,7 +72,8 @@ function mockGenerator(): SiteGenerator {
   return {
     async generate(spec, routes) { return ok(buildPages(spec, routes)); },
     async fix(spec, routes) { return ok(buildPages(spec, routes)); },
-    async edit(spec, routes, _current, instruction) {
+    async edit(spec, routes, current, instruction) {
+      if (/nonrendere/i.test(instruction)) return ok([...current]); // simula: non applica la modifica
       if (/rompi/i.test(instruction)) {
         const firstContent = spec.criteria.find((c) => c.check?.kind === 'content-present');
         const drop = firstContent && firstContent.check?.kind === 'content-present' ? firstContent.check.text : undefined;
@@ -256,19 +258,19 @@ test('ciclo di vita multi-pagina: crea -> modifica(accetta) -> modifica(rifiuta)
   assert.equal(created.value.state.pages.length, 2);
 
   // EDIT accettata (benigna)
-  const e1 = await editProject({ store, id: 'site1', instruction: 'ingrandisci i titoli', generator, runQa: mockQa });
+  const e1 = await editProject({ store, id: 'site1', instruction: 'ingrandisci i titoli', llm: mockLlm(JSON.stringify({ operations: [] })), generator, runQa: mockQa });
   assert.ok(e1.ok && e1.value.accepted, 'edit benigna accettata');
   assert.equal(e1.value.state.version, 2);
 
   // EDIT rifiutata (rompe un contenuto richiesto)
-  const e2 = await editProject({ store, id: 'site1', instruction: 'rompi il titolo', generator, runQa: mockQa });
+  const e2 = await editProject({ store, id: 'site1', instruction: 'rompi il titolo', llm: mockLlm(JSON.stringify({ operations: [] })), generator, runQa: mockQa });
   assert.ok(e2.ok && !e2.value.accepted, 'edit che rompe e rifiutata');
   assert.ok(e2.value.conflicts.length > 0);
   const afterReject = await getProject(store, 'site1');
   assert.equal(afterReject.ok && afterReject.value!.version, 2, 'versione invariata dopo rifiuto');
 
   // EDIT che inietta un segreto -> accettata dalla QA (contratto ok) ma...
-  const e3 = await editProject({ store, id: 'site1', instruction: 'inietta segreto', generator, runQa: mockQa });
+  const e3 = await editProject({ store, id: 'site1', instruction: 'inietta segreto', llm: mockLlm(JSON.stringify({ operations: [] })), generator, runQa: mockQa });
   assert.ok(e3.ok && e3.value.accepted, 'edit con segreto passa il gate di regressione');
 
   // APPROVE
@@ -330,4 +332,96 @@ test('createProject: rifiuta id gia esistente', async () => {
   assert.ok(first.ok);
   const second = await createProject({ store, id: 'dup', ownerId: 'o', description: 'd', llm, classifier: mockClassifier, generator, runQa: mockQa });
   assert.ok(!second.ok && second.error.code === 'PROJECT_EXISTS');
+});
+
+/* ----------------------------- modifica che aggiorna il contratto ----------------------------- */
+
+const baseSpec = {
+  id: 's', ownerId: 'o', category: 'business-landing' as const, title: 'T', description: 'd',
+  criteria: [
+    { id: 'c1', statement: 'Mostra "Studio Verde"', confirmed: true, check: { kind: 'content-present' as const, route: '/', text: 'Studio Verde' } },
+    { id: 'c2', statement: 'Mostra "Margherita"', confirmed: true, check: { kind: 'content-present' as const, route: '/menu', text: 'Margherita' } },
+  ],
+};
+const baseRoutes: RouteInfo[] = [{ route: '/', label: 'Home' }, { route: '/menu', label: 'Menu' }];
+const opsLlm = (operations: unknown[]) => mockLlm(JSON.stringify({ operations }));
+const contentTexts = (criteria: readonly { check?: { kind: string; route?: string; text?: string } }[], route: string) =>
+  criteria.filter((c) => c.check?.kind === 'content-present' && c.check.route === route).map((c) => c.check!.text!);
+
+test('planEdit add: aggiunge un criterio sulla pagina indicata', async () => {
+  const r = await planEdit({ instruction: 'aggiungi al menu la pizza Capricciosa', spec: baseSpec, routes: baseRoutes, llm: opsLlm([{ op: 'add', kind: 'content-present', route: '/menu', text: 'Capricciosa' }]) });
+  assert.ok(r.ok);
+  assert.ok(contentTexts(r.value.criteria, '/menu').includes('Capricciosa'));
+  assert.ok(contentTexts(r.value.criteria, '/menu').includes('Margherita'), 'gli altri restano');
+});
+
+test('planEdit change: sostituisce un criterio esistente per numero', async () => {
+  const r = await planEdit({ instruction: 'cambia il titolo', spec: baseSpec, routes: baseRoutes, llm: opsLlm([{ op: 'change', target: 1, kind: 'content-present', route: '/', text: 'Studio Blu' }]) });
+  assert.ok(r.ok);
+  assert.ok(contentTexts(r.value.criteria, '/').includes('Studio Blu'));
+  assert.equal(contentTexts(r.value.criteria, '/').includes('Studio Verde'), false, 'il vecchio testo sparisce');
+});
+
+test('planEdit remove: toglie un criterio per numero', async () => {
+  const r = await planEdit({ instruction: 'togli la margherita', spec: baseSpec, routes: baseRoutes, llm: opsLlm([{ op: 'remove', target: 2 }]) });
+  assert.ok(r.ok);
+  assert.equal(contentTexts(r.value.criteria, '/menu').includes('Margherita'), false);
+});
+
+test('planEdit rete di sicurezza: testo tra virgolette recuperato anche se l\'LLM non produce operazioni', async () => {
+  const r = await planEdit({ instruction: 'aggiungi al menu la voce "Quattro Formaggi"', spec: baseSpec, routes: baseRoutes, llm: opsLlm([]) });
+  assert.ok(r.ok);
+  assert.ok(contentTexts(r.value.criteria, '/menu').includes('Quattro Formaggi'), 'recuperata su /menu');
+});
+
+test('planEdit estetica: nessuna operazione, contratto invariato', async () => {
+  const r = await planEdit({ instruction: 'ingrandisci i titoli e usa toni verdi', spec: baseSpec, routes: baseRoutes, llm: opsLlm([]) });
+  assert.ok(r.ok);
+  assert.equal(r.value.criteria.length, baseSpec.criteria.length);
+  assert.deepEqual(contentTexts(r.value.criteria, '/menu'), ['Margherita']);
+});
+
+test('editProject: una modifica accettata FA CRESCERE il contratto e si vede nel riepilogo', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'brik-edit-grow-'));
+  const store = makeFileSiteStore(dir);
+  const generator = mockGenerator();
+  const planA = JSON.stringify({ title: 'Studio', category: 'business-landing', pages: [
+    { route: '/', label: 'Home', statements: ['Titolo "Studio Verde"'] },
+    { route: '/menu', label: 'Menu', statements: ['Mostra "Margherita"'] },
+  ] });
+  const created = await createProject({ store, id: 'g', ownerId: 'o', description: 'd', llm: mockLlm(planA), classifier: mockClassifier, generator, runQa: mockQa });
+  assert.ok(created.ok);
+
+  const e = await editProject({ store, id: 'g', instruction: 'aggiungi al menu la pizza Capricciosa', llm: opsLlm([{ op: 'add', kind: 'content-present', route: '/menu', text: 'Capricciosa' }]), generator, runQa: mockQa });
+  assert.ok(e.ok && e.value.accepted, 'modifica accettata');
+  assert.ok(e.value.changes.length > 0);
+
+  const after = await getProject(store, 'g');
+  assert.ok(after.ok && after.value);
+  assert.ok(contentTexts(after.value!.spec.criteria, '/menu').includes('Capricciosa'), 'criterio aggiunto e persistito');
+  const sm = summarizeSite(after.value!.spec, after.value!.routes);
+  const menu = sm.pages.find((p) => p.route === '/menu')!;
+  assert.ok(menu.contents.includes('Capricciosa'), 'il riepilogo riflette la modifica');
+});
+
+test('editProject: una modifica che NON ottiene il criterio richiesto viene RIFIUTATA (verifica reale)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'brik-edit-verify-'));
+  const store = makeFileSiteStore(dir);
+  const generator = mockGenerator();
+  const planA = JSON.stringify({ title: 'Studio', category: 'business-landing', pages: [
+    { route: '/', label: 'Home', statements: ['Titolo "Studio Verde"'] },
+    { route: '/menu', label: 'Menu', statements: ['Mostra "Margherita"'] },
+  ] });
+  const created = await createProject({ store, id: 'v', ownerId: 'o', description: 'd', llm: mockLlm(planA), classifier: mockClassifier, generator, runQa: mockQa });
+  assert.ok(created.ok);
+
+  // l'estrattore chiede di aggiungere Capricciosa, ma il generatore "nonrendere" non la mette
+  const e = await editProject({ store, id: 'v', instruction: 'aggiungi Capricciosa al menu nonrendere', llm: opsLlm([{ op: 'add', kind: 'content-present', route: '/menu', text: 'Capricciosa' }]), generator, runQa: mockQa });
+  assert.ok(e.ok && !e.value.accepted, 'rifiutata perche il criterio nuovo non e soddisfatto');
+  assert.ok(e.value.conflicts.length > 0);
+
+  const after = await getProject(store, 'v');
+  assert.ok(after.ok && after.value);
+  assert.equal(contentTexts(after.value!.spec.criteria, '/menu').includes('Capricciosa'), false, 'contratto NON modificato');
+  assert.equal(after.value!.version, 1, 'versione invariata');
 });
