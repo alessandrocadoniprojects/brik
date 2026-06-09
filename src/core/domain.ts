@@ -69,6 +69,12 @@ export interface ProjectSpec {
   readonly title: string;
   readonly description: string;
   readonly criteria: readonly AcceptanceCriterion[];
+  /**
+   * Materiale REALE fornito dall'utente (testo estratto dagli allegati e/o da un
+   * sito importato). NON genera criteri di QA verbatim: è una FONTE di testi e dati
+   * veri che il generatore usa per riempire la prima bozza invece di inventare placeholder.
+   */
+  readonly content?: string;
   /** Estensioni future, già previste come opzionali: */
   readonly brandKit?: BrandKit;
   /** URL/screenshot di riferimento estetico (Fase 4). */

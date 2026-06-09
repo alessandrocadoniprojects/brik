@@ -25,7 +25,7 @@ function validateState(st: unknown): st is SiteState {
   const s = st as Record<string, unknown>;
   if (typeof s.id !== 'string') return false;
   if (typeof s.version !== 'number' || typeof s.updatedAt !== 'string') return false;
-  if (s.status !== 'preview' && s.status !== 'approved' && s.status !== 'published') return false;
+  if (s.status !== 'preview' && s.status !== 'approved' && s.status !== 'published' && s.status !== 'locked') return false;
   if (!isStrArr(s.statements)) return false;
   if (!Array.isArray(s.routes) || !Array.isArray(s.pages)) return false;
   if (!s.pages.every((p) => p && typeof (p as Record<string, unknown>).route === 'string' && typeof (p as Record<string, unknown>).html === 'string')) return false;

@@ -52,6 +52,7 @@ const SYSTEM = [
   'Se l\'utente ELENCA piu voci (separate da virgola, tra parentesi, o dopo i due punti — es. piatti, servizi, prodotti), crea UNA frase-requisito PER OGNI voce, col nome ESATTO. NON riassumere gli elenchi.',
   'Se c\'e un form, scrivi nella frase i campi e il messaggio di conferma ESATTO tra virgolette (es. mostra "Grazie, a presto" dopo l\'invio). Per ogni pagina AL MASSIMO UN form.',
   'NON elencare voci di menu o link come requisiti: la navigazione tra le pagine e automatica. Non elencare etichette di bottoni o nomi di campi come requisiti separati. Niente ripetizioni.',
+  'NAMING del sito (campo "title"): se l\'utente fornisce un nome o brand reale, usalo IDENTICO. Altrimenti INVENTA un nome proprio credibile e specifico, NON una categoria generica. VIETATO usare come nome etichette di categoria tipo Studio Dentistico, Ristorante o Studio Legale. Se la richiesta cita una citta o una zona, ancora il nome a quella (es. Studio Brera Odontoiatria oppure Brera Dental Studio); altrimenti scegli un nome proprio plausibile come un cognome o un riferimento locale. Il nome deve sembrare quello vero di un\'attivita esistente.',
   'Esempio: richiesta "pizzeria, pagina menu (Margherita, Marinara, Diavola)" -> pagina /menu con TRE frasi: Mostra "Margherita"; Mostra "Marinara"; Mostra "Diavola".',
   'Rispondi SOLO con JSON valido (nessun markdown), in questa forma:',
   '{"title":"...","category":"business-landing|lead-landing|booking|ecommerce|portfolio|directory|blog|crud-app","pages":[{"route":"/","label":"Home","statements":["..."]}]}',
@@ -203,21 +204,53 @@ export interface SitePlan {
   readonly routes: readonly RouteInfo[];
 }
 
+/**
+ * Estrae un nome/brand ESPLICITO dalla descrizione, se presente, in modo
+ * deterministico. Riconosce "Nome: X", "Name: X", "si chiama X". Ritorna il nome
+ * ripulito (taglia alla prima andata a capo o punto fermo, max 80 char) oppure null.
+ * Funzione PURA: nessun effetto collaterale, unit-testabile.
+ */
+export function explicitName(description: string): string | null {
+  const d = description || '';
+  const m =
+    d.match(/\b(?:nome|name)\s*[:\-]\s*([^\n.]{2,80})/i) ||
+    d.match(/\bsi\s+chiama\s+([^\n.,]{2,80})/i);
+  if (!m || !m[1]) return null;
+  const name = m[1].trim().replace(/\s+/g, ' ').replace(/["'»«]+$/g, '').trim();
+  return name.length >= 2 ? name : null;
+}
+
 export async function planSite(args: {
   readonly id: string;
   readonly ownerId: string;
   readonly description: string;
   readonly llm: LLMProvider;
   readonly classifier: IntakeClassifier;
+  /** Materiale reale (allegati / sito importato): guida la STRUTTURA e finisce in spec.content. NON entra nei parser verbatim. */
+  readonly content?: string;
 }): Promise<Result<SitePlan>> {
-  // 1) Struttura dal pianificatore
-  const res = await args.llm.complete({ system: SYSTEM, prompt: 'Richiesta dell\'utente:\n' + args.description, tier: 'balanced', maxTokens: 2048 });
-  if (!res.ok) return err(res.error);
-
-  let parsed: { title?: unknown; category?: unknown; pages?: unknown };
-  try {
-    parsed = JSON.parse(stripToJson(res.value.text));
-  } catch {
+  // 1) Struttura dal pianificatore. Il materiale reale entra SOLO nel prompt dell'LLM
+  //    (NON nei parser deterministici sotto: la punteggiatura del documento non deve creare criteri).
+  const material = (args.content ?? '').trim();
+  const planPrompt = material
+    ? "Richiesta dell'utente:\n" + args.description +
+      '\n\nMATERIALE REALE fornito dal cliente (estratto da allegati/sito). Usalo per capire QUALI pagine/sezioni servono e quali contenuti mettere; NON inventare dati diversi da questi:\n"""\n' +
+      material +
+      '\n"""'
+    : "Richiesta dell'utente:\n" + args.description;
+  // Tetto piu alto (un piano troncato a 2048 token = JSON invalido) + un retry:
+  // se il parse fallisce una volta, riprova prima di arrendersi.
+  let parsed: { title?: unknown; category?: unknown; pages?: unknown } | null = null;
+  for (let attempt = 0; attempt < 2 && !parsed; attempt += 1) {
+    const res = await args.llm.complete({ system: SYSTEM, prompt: planPrompt, tier: 'fast', maxTokens: 4096 });
+    if (!res.ok) continue;
+    try {
+      parsed = JSON.parse(stripToJson(res.value.text)) as { title?: unknown; category?: unknown; pages?: unknown };
+    } catch {
+      parsed = null;
+    }
+  }
+  if (!parsed) {
     return err(appError('PLAN_BAD_JSON', 'Il pianificatore non ha prodotto JSON valido.', { retryable: true }));
   }
 
@@ -248,7 +281,11 @@ export async function planSite(args: {
   const routes: RouteInfo[] = finalPages.map((p) => ({ route: p.route, label: p.label }));
   const knownRoutes = routes.map((r) => r.route);
   const category = CATEGORIES.includes(parsed.category as ProjectCategory) ? (parsed.category as ProjectCategory) : 'business-landing';
-  const title = typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title.trim() : args.id;
+  // Naming: un nome ESPLICITO nel testo ("Nome: Studio Brera", "si chiama X") vince
+  // sempre sul titolo prodotto dall'LLM, in modo deterministico. Altrimenti si usa il
+  // titolo dell'LLM (orientato dall'istruzione di naming) e in ultima istanza l'id.
+  const forced = explicitName(args.description);
+  const title = forced ?? (typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title.trim() : args.id);
 
   // 2) Classifica ogni frase e sovrascrivi la route con quella della pagina.
   const seenContent = new Set<string>(); // route\u0000testo
@@ -338,6 +375,7 @@ export async function planSite(args: {
     title,
     description: args.description,
     criteria,
+    ...(material ? { content: material.slice(0, 16000) } : {}),
   };
   return ok({ spec, routes });
 }

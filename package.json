@@ -19,6 +19,11 @@
     "eval": "tsx --env-file=.env demo/eval.ts",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "mammoth": "^1.12.0",
+    "stripe": "^22.2.0",
+    "unpdf": "^1.6.2"
+  },
   "devDependencies": {
     "@types/jsdom": "^28.0.3",
     "@types/node": "^25.9.1",

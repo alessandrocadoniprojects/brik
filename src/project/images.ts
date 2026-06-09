@@ -14,7 +14,7 @@ import type { ImageSource } from '../adapters/images/pexels.js';
 
 const IMG_TAG = /<img\b[^>]*?\bdata-brik-img="([^"]*)"[^>]*?>/gi;
 
-/** Estrae le query uniche dei segnaposto immagine (esportata per i test). */
+/** Estrae le query uniche dei segnaposto immagine (esportata per i test). I segnaposto foto-utente ("user:N") sono esclusi: li risolve un altro modulo. */
 export function extractImageQueries(pages: readonly SitePage[]): string[] {
   const set = new Set<string>();
   for (const p of pages) {
@@ -22,7 +22,7 @@ export function extractImageQueries(pages: readonly SitePage[]): string[] {
     let m: RegExpExecArray | null;
     while ((m = IMG_TAG.exec(p.html)) !== null) {
       const q = (m[1] ?? '').trim();
-      if (q) set.add(q);
+      if (q && !q.startsWith('user:')) set.add(q);
     }
   }
   return [...set];
@@ -45,7 +45,9 @@ export async function resolveImages(pages: readonly SitePage[], images: ImageSou
   return pages.map((p) => {
     IMG_TAG.lastIndex = 0;
     const html = p.html.replace(IMG_TAG, (tag: string, q: string) => {
-      const url = urls.get((q ?? '').trim());
+      const key = (q ?? '').trim();
+      if (key.startsWith('user:')) return tag; // foto utente: le materializza assets.ts
+      const url = urls.get(key);
       return url ? fillTag(tag, url) : '';
     });
     return { ...p, html };

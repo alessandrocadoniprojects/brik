@@ -70,6 +70,8 @@ export interface ResendHostConfig {
   readonly resendFrom?: string;
   readonly resendKey?: string;
   readonly projectPrefix?: string;
+  /** Nome progetto scelto dall'utente (sottodominio). Se assente, derivato dal siteId. */
+  readonly projectName?: string;
   readonly apiToken?: string;
   readonly accountId?: string;
 }
@@ -99,7 +101,9 @@ export function makeCloudflarePagesResendHost(config: ResendHostConfig): SiteHos
       if (!apiToken || !accountId) {
         return err(appError('HOSTING_NOT_CONFIGURED', 'Imposta CLOUDFLARE_API_TOKEN e CLOUDFLARE_ACCOUNT_ID nel .env per pubblicare.', { retryable: false }));
       }
-      const projectName = sanitizeProjectName(input.siteId, config.projectPrefix ?? '');
+      const projectName = config.projectName
+        ? sanitizeProjectName(config.projectName)
+        : sanitizeProjectName(input.siteId, config.projectPrefix ?? '');
       const env = { ...process.env, CLOUDFLARE_API_TOKEN: apiToken, CLOUDFLARE_ACCOUNT_ID: accountId, CI: '1' };
 
       let dir: string | undefined;

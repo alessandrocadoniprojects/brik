@@ -27,6 +27,11 @@ import { extractQuoted, extractLabeledLists } from './sitePlanner.js';
 
 const norm = (s: string): string => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 
+const MEDIA_NOUN = /^(foto|immagine|immagini|logo|loghi|galleria|gallery|carosello|carousel|slideshow|video|mappa|map|icona|icone|sfondo|banner|grafica|illustrazione)\b/;
+/** Un testo che DESCRIVE un media (es. "una foto delle proprietarie") non e un criterio di testo verificabile. */
+const isMediaDescriptor = (text: string): boolean =>
+  MEDIA_NOUN.test(norm(text).replace(/^(?:un|una|uno|il|lo|la|i|gli|le|l)(?:['’]|\s+)/, ''));
+
 const SYSTEM = [
   'Sei un assistente che traduce una richiesta di MODIFICA di un sito in operazioni sul contratto di verifica.',
   'Operazioni ammesse: "add" (nuovo requisito verificabile), "change" (sostituisci un requisito esistente), "remove" (togli un requisito esistente).',
@@ -34,8 +39,11 @@ const SYSTEM = [
   'Tipi (kind): content-present (route, text), form-submission (route, fields[] con label e value, confirmationText), responsive (route). NON usare "navigation": la navigazione tra le pagine e automatica.',
   'Usa SOLO le route note. Riporta i testi tra virgolette IDENTICI a come li scrive l\'utente.',
   'Se la richiesta e SOLO estetica (colori, dimensioni, posizioni, font) restituisci operations: [].',
+  '"content-present" vale SOLO per TESTO leggibile che deve comparire (slogan, nome, prezzo, voce di menu). NON descrivere un media come se fosse testo.',
+  'Richieste su MEDIA/EMBED (foto, immagine, logo, galleria, video, mappa, icona, sfondo) NON sono criteri di testo: se la modifica aggiunge/cambia/sposta un media o un embed (e non un testo specifico da scrivere), restituisci operations: []. La modifica viene comunque applicata e protetta dai criteri esistenti.',
   'Rispondi SOLO con JSON valido (nessun markdown):',
   '{"operations":[{"op":"add","kind":"content-present","route":"/menu","text":"Capricciosa"}]}',
+  'Esempio media: richiesta "inserisci una foto del proprietario nella sezione chi siamo" -> {"operations":[]}.',
   'Per sostituire (es. "cambia lo slogan in X") usa "change" col target del requisito attuale: {"operations":[{"op":"change","target":2,"kind":"content-present","route":"/","text":"X"}]}.',
 ].join('\n');
 
@@ -127,6 +135,7 @@ export async function planEdit(args: {
     if (o.kind === 'navigation') continue; // gestita in automatico
     const v = validateCriterion(o, knownRoutes);
     if (!v.spec) continue;
+    if (v.spec.kind === 'content-present' && isMediaDescriptor(v.spec.text)) continue; // media/embed: non e un criterio di testo
     if (op === 'change') {
       const i = idxOf(o.target);
       if (i === undefined) {
@@ -184,6 +193,7 @@ export async function planEdit(args: {
   };
   for (const { route, text } of extractLabeledLists(args.instruction, args.routes.map((r) => ({ route: r.route, label: r.label })))) {
     if (!knownRoutes.includes(route)) continue;
+    if (isMediaDescriptor(text)) continue; // descrittore di media in un elenco: non è un criterio di testo
     const key = route + '\u0000' + norm(text);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -192,6 +202,7 @@ export async function planEdit(args: {
   }
   for (const q of extractQuoted(args.instruction)) {
     const nq = norm(q);
+    if (isMediaDescriptor(q)) continue; // citazione che descrive un media: non è testo da mostrare
     if (confirmTexts.has(nq)) continue;
     const route = routeForQuoted();
     const key = route + '\u0000' + nq;
@@ -201,6 +212,10 @@ export async function planEdit(args: {
     changes.push('aggiunto: ' + q);
   }
 
-  const criteria = merged.map((c, i) => ({ ...c, id: 'c' + (i + 1) }));
+  // Sanatoria: un criterio "content-present" che in realtà descrive un media (es. "una foto delle proprietarie")
+  // non è verificabile come testo visibile e bloccherebbe ogni modifica futura sulla sua pagina. Lo scartiamo qui:
+  // copre sia i criteri appena dedotti sia quelli GIÀ salvati nella spec (auto-riparazione al primo edit utile).
+  const cleaned = merged.filter((c) => !(c.check && c.check.kind === 'content-present' && isMediaDescriptor(c.check.text)));
+  const criteria = cleaned.map((c, i) => ({ ...c, id: 'c' + (i + 1) }));
   return ok({ criteria, changes });
 }

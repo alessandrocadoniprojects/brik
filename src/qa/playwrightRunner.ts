@@ -27,6 +27,53 @@ const norm = (s: string): string =>
 const REVEAL_RE = /contatt|prenot|appuntament|scriv|richiest|prenotazione|contact/i;
 const SUBMIT_RE = /invia|inviare|spedisci|prenota|richiedi|iscriv|conferma|submit|manda|registra|aggiungi|salva|crea/i;
 
+/** Quante pagine al massimo aperte contemporaneamente durante la QA. */
+const QA_CONCURRENCY = 4;
+
+/**
+ * Esegue `fn` su ogni elemento con al massimo `limit` esecuzioni in parallelo.
+ * I risultati mantengono l'ORDINE degli input (results[i] = fn(items[i])), così
+ * il gate riceve gli stessi array della versione sequenziale: stessa diagnosi,
+ * solo piu veloce. Ogni `fn` apre e chiude la PROPRIA pagina: nessuno stato
+ * condiviso tra i controlli.
+ */
+async function mapLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i] as T, i);
+    }
+  };
+  const n = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: n }, worker));
+  return results;
+}
+
+/**
+ * Pagina QA: la verifica guarda DOM / testo / layout (CSS inline), non il rendering
+ * delle immagini. Blocchiamo immagini, media e font remoti (le foto Pexels) cosi le
+ * navigazioni NON aspettano download di rete — e' la causa principale di lentezza.
+ * Timeout espliciti per evitare che una risorsa lenta blocchi il check.
+ */
+async function newQaPage(browser: Browser): Promise<Page> {
+  const page = await browser.newPage();
+  page.setDefaultNavigationTimeout(15000);
+  page.setDefaultTimeout(15000);
+  await page.route('**/*', (route) => {
+    const t = route.request().resourceType();
+    if (t === 'image' || t === 'media' || t === 'font') return route.abort();
+    return route.continue();
+  });
+  return page;
+}
+
 export function makePlaywrightQaRunner(
   baseUrl: string,
   knownRoutes: readonly string[],
@@ -36,40 +83,40 @@ export function makePlaywrightQaRunner(
 
   return {
     async run(_project, spec: ProjectSpec): Promise<Result<ReturnType<typeof buildGate>>> {
-      const browser: Browser = opts.browser ?? (await chromium.launch());
+      const browser: Browser = opts.browser ?? (await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}));
       const ownBrowser = !opts.browser;
       try {
-        const level1: CheckResult[] = [];
-        for (const route of knownRoutes) {
-          const page = await browser.newPage();
+        // Livello 1: ogni route si apre? Pagine indipendenti, in parallelo (tetto QA_CONCURRENCY).
+        const level1 = await mapLimit(knownRoutes, QA_CONCURRENCY, async (route): Promise<CheckResult> => {
+          const page = await newQaPage(browser);
           try {
-            const resp = await page.goto(url(route), { waitUntil: 'load' });
+            const resp = await page.goto(url(route), { waitUntil: 'domcontentloaded' });
             const passed = !!resp && resp.ok();
-            level1.push({
+            return {
               criterionId: `L1:${route}`,
               kind: 'route-loads',
               passed,
               ...(passed ? {} : { detail: `Route non carica: ${route}` }),
-            });
+            };
           } catch (e) {
-            level1.push({ criterionId: `L1:${route}`, kind: 'route-loads', passed: false, detail: String(e) });
+            return { criterionId: `L1:${route}`, kind: 'route-loads', passed: false, detail: String(e) };
           } finally {
             await page.close();
           }
-        }
+        });
 
-        const level2: CheckResult[] = [];
-        for (const c of spec.criteria) {
-          if (!c.check) continue;
-          const page = await browser.newPage();
+        // Livello 2: un criterio per pagina, anch'essi in parallelo (ognuno apre/chiude la sua pagina).
+        const checks = spec.criteria.flatMap((c) => (c.check ? [{ id: c.id, check: c.check }] : []));
+        const level2 = await mapLimit(checks, QA_CONCURRENCY, async ({ id, check }): Promise<CheckResult> => {
+          const page = await newQaPage(browser);
           try {
-            level2.push(await runOne(page, url, c.id, c.check));
+            return await runOne(page, url, id, check);
           } catch (e) {
-            level2.push({ criterionId: c.id, kind: c.check.kind, passed: false, detail: String(e).slice(0, 120) });
+            return { criterionId: id, kind: check.kind, passed: false, detail: String(e).slice(0, 120) };
           } finally {
             await page.close();
           }
-        }
+        });
 
         return ok(buildGate(spec, level1, level2));
       } finally {
@@ -200,34 +247,34 @@ async function runOne(
 
   switch (check.kind) {
     case 'route-loads': {
-      const resp = await page.goto(url(check.route), { waitUntil: 'load' });
+      const resp = await page.goto(url(check.route), { waitUntil: 'domcontentloaded' });
       return resp && resp.ok() ? pass() : fail(`HTTP non ok per ${check.route}`);
     }
 
     case 'content-present': {
-      await page.goto(url(check.route), { waitUntil: 'load' });
+      await page.goto(url(check.route), { waitUntil: 'domcontentloaded' });
       const text = await page.evaluate(() => document.body.innerText || '');
       return norm(text).includes(norm(check.text)) ? pass() : fail(`Testo non visibile: "${check.text}"`);
     }
 
     case 'responsive': {
       await page.setViewportSize({ width: 375, height: 812 });
-      await page.goto(url(check.route), { waitUntil: 'load' });
+      await page.goto(url(check.route), { waitUntil: 'domcontentloaded' });
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
       return overflow ? fail('Overflow orizzontale su mobile (375px).') : pass();
     }
 
     case 'navigation': {
-      await page.goto(url(check.fromRoute), { waitUntil: 'load' });
+      await page.goto(url(check.fromRoute), { waitUntil: 'domcontentloaded' });
       await page.getByRole('link', { name: new RegExp(rx(check.linkText), 'i') }).first().click();
-      await page.waitForLoadState('load').catch(() => undefined);
+      await page.waitForLoadState('domcontentloaded').catch(() => undefined);
       return new RegExp(check.toRoutePattern).test(page.url())
         ? pass()
         : fail(`URL dopo click: ${page.url()} non combacia con ${check.toRoutePattern}`);
     }
 
     case 'form-submission': {
-      await page.goto(url(check.route), { waitUntil: 'load' });
+      await page.goto(url(check.route), { waitUntil: 'domcontentloaded' });
       // se il form fosse in una sezione nascosta, prova a rivelarlo usando il primo campo come sonda
       const firstField = check.fields[0];
       if (firstField) {

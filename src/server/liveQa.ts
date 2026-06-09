@@ -43,7 +43,7 @@ export async function makeLiveQa(): Promise<LiveQa> {
   });
   await new Promise<void>((r) => server.listen(0, r));
   const baseUrl = 'http://localhost:' + (server.address() as AddressInfo).port;
-  const browser: Browser = await chromium.launch();
+  const browser: Browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 
   // coda di serializzazione
   let chain: Promise<unknown> = Promise.resolve();

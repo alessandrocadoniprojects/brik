@@ -46,6 +46,8 @@ interface CloudflareConfig {
   readonly accountId?: string;
   readonly apiToken?: string;
   readonly projectPrefix?: string;
+  /** Nome progetto scelto dall'utente (sottodominio). Se assente, derivato dal siteId. */
+  readonly projectName?: string;
   /** override per i test: esegue il comando e ritorna stdout. */
   readonly runner?: (dir: string, projectName: string, env: NodeJS.ProcessEnv) => Promise<Result<string>>;
 }
@@ -81,7 +83,9 @@ export function makeCloudflarePagesHost(config: CloudflareConfig = {}): SiteHost
       if (!apiToken || !accountId) {
         return err(appError('HOSTING_NOT_CONFIGURED', 'Imposta CLOUDFLARE_API_TOKEN e CLOUDFLARE_ACCOUNT_ID nel .env per pubblicare.', { retryable: false }));
       }
-      const projectName = sanitizeProjectName(input.siteId, config.projectPrefix ?? '');
+      const projectName = config.projectName
+        ? sanitizeProjectName(config.projectName)
+        : sanitizeProjectName(input.siteId, config.projectPrefix ?? '');
 
       let dir: string | undefined;
       try {

@@ -45,12 +45,13 @@ export function buildContactForm(
   const inputs = fields.map((f) => fieldHtml(f.label)).join('');
   const script =
     "(function(){var f=document.getElementById('brik-contact');if(!f)return;" +
-    "var ok=f.querySelector('[data-brik-confirm]');var ko=f.querySelector('[data-brik-error]');" +
+    "var ok=f.querySelector('[data-brik-confirm]');var ko=f.querySelector('[data-brik-error]');var t0=Date.now();" +
     "f.addEventListener('submit',function(e){e.preventDefault();" +
     "function show(el){if(el){el.hidden=false;}}function reset(){try{f.reset();}catch(_){}}" +
     "if(navigator.webdriver||f.getAttribute('action')==='#'){show(ok);reset();return;}" +
     "if(ko){ko.hidden=true;}" +
-    "fetch(f.action,{method:'POST',body:new FormData(f)}).then(function(r){if(r.ok){show(ok);reset();}else{show(ko);}}).catch(function(){show(ko);});});})();";
+    "var fd=new FormData(f);fd.append('_dt',String(Date.now()-t0));" +
+    "fetch(f.action,{method:'POST',body:new URLSearchParams(fd)}).then(function(r){if(r.ok){show(ok);reset();}else{show(ko);}}).catch(function(){show(ko);});});})();";
   const form =
     `<form id="brik-contact" data-brik-form method="POST" action="${escAttr(action)}" novalidate>` +
     hidden +
