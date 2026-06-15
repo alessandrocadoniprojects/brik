@@ -18,6 +18,7 @@ import type {
   CompositionPattern,
   PatternKey,
   CreativeDirection,
+  RecommendedTheme,
 } from '../core/creativeDirection.js';
 
 /**
@@ -295,13 +296,101 @@ export function creativeDirectionForIndustry(
 }
 
 /**
+ * Decide il TEMA (uno degli 8 esistenti) dalla descrizione, con keyword conservative
+ * e fallback sicuro a 'scandinavian-service'. NON introduce nuovi temi. È volutamente
+ * a livello di descrizione (non di settore): consente biforcazioni come pizzeria →
+ * scandinavian vs ristorante gourmet → editorial-luxury, copre categorie fuori
+ * dall'enum Industry e non ricade MAI sul noir di default per il non riconosciuto.
+ * Valutazione first-match: l'ordine conta (specifico prima del generico).
+ */
+export function recommendedThemeFromDescription(description: string): RecommendedTheme {
+  const t = (description || '').toLowerCase();
+  const has = (...kw: string[]) => kw.some((k) => t.includes(k));
+  const luxury = has('lusso', 'luxury', 'di lusso', 'esclusiv', 'prestige', 'high-end', 'high end', '5 stelle', 'cinque stelle', 'alta gamma');
+
+  // 1) Auto sportive / supercar / performance → athletic-premium (editorial-luxury solo se lusso esplicito)
+  if (has('supercar', 'hypercar') || (has('auto', 'vettur') && has('sportiv', 'performance', 'da corsa', 'racing'))) {
+    return luxury ? 'editorial-luxury' : 'athletic-premium';
+  }
+  // 2) Auto di lusso esplicite → editorial-luxury
+  if (has('luxury car', 'auto di lusso') || (has('noleggio') && has('auto', 'vettur') && luxury)) {
+    return 'editorial-luxury';
+  }
+  // 3) Noleggio furgoni / flotte / mezzi da lavoro / macchinari → industrial-bold
+  if (has('furgon', 'flotte', 'flotta', 'mezzi da lavoro', 'macchinari', 'muletti', 'escavator', 'noleggio mezzi', 'veicoli commerciali')) {
+    return 'industrial-bold';
+  }
+  // 4) Edilizia / officina / logistica / manifattura → industrial-bold
+  if (has('edilizia', 'costruzioni', 'impresa edile', 'ristrutturazion', 'officina', 'meccanico', 'carrozzeria', 'logistica', 'trasporti', 'spedizion', 'manifattur', 'metalmecc', 'fabbrica', 'magazzino')) {
+    return 'industrial-bold';
+  }
+  // 5) Noleggio auto generico (consumer) → scandinavian-service
+  if (has('noleggio auto', 'autonoleggio', 'rent a car', 'noleggio veicoli', 'noleggio macchine')) {
+    return 'scandinavian-service';
+  }
+  // 6) Ristorazione di fascia alta / chef → editorial-luxury
+  if (has('fine dining', 'gourmet', 'stellat', 'michelin', 'degustazione', 'alta cucina', 'chef')) {
+    return 'editorial-luxury';
+  }
+  // 7) Ospitalità premium → editorial-luxury
+  if (has('hotel', 'resort', 'boutique hotel', 'relais', 'dimora di charme', 'villa di lusso')) {
+    return 'editorial-luxury';
+  }
+  // 8) Ristorazione casual / quartiere → warm-bistro se attivo, fallback prudente a scandinavian-service.
+  if (has('pizzeria', 'pizza', 'trattoria', 'osteria', 'bistrot', 'paninoteca', 'panificio', 'panetteria', 'forno', 'forno a legna', 'gelateria', 'pasticceria', 'rosticceria', 'tavola calda', 'ristorant', 'enoteca', 'caffetteria', 'caffe', 'bar', 'pub', 'agriturismo', 'catering', 'food truck', 'cucina locale')) {
+    return process.env.BRIK_THEME_BISTRO === 'on' ? 'warm-bistro' : 'scandinavian-service';
+  }
+  // 9) Pet grooming / toelettatura → scandinavian-service (editorial-luxury solo se lusso esplicito)
+  if (has('toelettatura', 'toelettatore', 'toeletta', 'pet grooming', 'dog grooming', 'pet spa')) {
+    return luxury ? 'editorial-luxury' : 'scandinavian-service';
+  }
+  // 10) SaaS / software / app / AI → modern-saas
+  if (has('saas', 'software', 'gestionale', 'crm', 'erp', 'applicazione', 'web app', 'mobile app', 'startup tech', 'b2b software', 'dashboard', 'intelligenza artificiale', 'machine learning', 'piattaforma software', 'piattaforma saas', 'piattaforma digitale')) {
+    return 'modern-saas';
+  }
+  // 11) Fotografia / design / branding / portfolio → creative-studio
+  if (has('fotograf', 'portfolio', 'design', 'branding', 'brand identity', 'grafic', 'art direction', 'illustrazion', 'agenzia creativa', 'studio creativo')) {
+    return 'creative-studio';
+  }
+  // 12) Fitness / sport → athletic-premium
+  if (has('palestra', 'fitness', 'gym', 'crossfit', 'personal trainer', 'padel', 'tennis', 'calcetto', 'allenament', 'bodybuilding', 'pilates', 'sport')) {
+    return 'athletic-premium';
+  }
+  // 13) Architettura / finanza / fintech / innovazione, e consulenza PREMIUM esplicita → future-minimal
+  if (has('architett', 'finanza', 'fintech', 'investiment', 'wealth', 'innovazione', 'venture', 'deep tech', 'ricerca e sviluppo') || (has('consulenza', 'consulente', 'advisory') && (luxury || has('premium', 'top management', 'alto profilo')))) {
+    return 'future-minimal';
+  }
+  // 14) Consulenza generica → scandinavian-service
+  if (has('consulenza', 'consulente', 'advisory', 'studio di consulenza')) {
+    return 'scandinavian-service';
+  }
+  // 15) Studio legale / notarile → editorial-luxury (autorevolezza; coerente col seed esistente)
+  if (has('avvocat', 'studio legale', 'notaio', 'law firm', 'attorney', 'contenzioso')) {
+    return 'editorial-luxury';
+  }
+  // 16) Dentista / medicale → scandinavian-service (mai editorial-luxury senza lusso esplicito)
+  if (has('dentist', 'odontoiatr', 'dental', 'ortodonzia', 'fisioterap', 'poliambulatorio', 'studio medico', 'clinica')) {
+    return 'scandinavian-service';
+  }
+  // 17) Associazioni / eventi / corsi / community / coworking → modern-community
+  if (has('associazione', 'onlus', 'no profit', 'no-profit', 'volontariat', 'eventi', 'evento', 'corsi', 'formazione', 'community', 'coworking', 'scuola', 'accademia', 'festival', 'fondazione')) {
+    return 'modern-community';
+  }
+  // 18) Fallback sicuro: mai noir di default.
+  return 'scandinavian-service';
+}
+
+/**
  * Comodo: rileva il settore dalla descrizione e ne compone la CreativeDirection.
- * Punto d'ingresso unico del livello decisionale (per quando, in step successivi,
- * lo collegheremo al planner).
+ * Punto d'ingresso unico del livello decisionale. Il TEMA viene deciso a livello di
+ * descrizione (keyword), sovrascrivendo quello del seed: così pizzeria e ristorante
+ * gourmet — stesso settore 'restaurant' — ottengono temi diversi, e le categorie non
+ * mappate non cadono mai sul default noir.
  */
 export function creativeDirectionFromDescription(description: string): CreativeDirection {
   const industry = detectIndustry(description);
-  return creativeDirectionForIndustry(industry, { detected: industry !== 'generic' });
+  const cd = creativeDirectionForIndustry(industry, { detected: industry !== 'generic' });
+  return { ...cd, recommendedTheme: recommendedThemeFromDescription(description) };
 }
 
 /** Etichette italiane per il prompt (le forme inglesi restano nei seed/log). */

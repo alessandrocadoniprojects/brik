@@ -13,11 +13,12 @@
  * valida comunque il tema (isTheme), quindi un eventuale disallineamento è innocuo.
  */
 
-/** Le 8 identità esistenti (specchio di THEME_NAMES in designSystem.ts). */
+/** Le identità esistenti (specchio di THEME_NAMES in designSystem.ts). */
 export type RecommendedTheme =
   | 'editorial-luxury'
   | 'athletic-premium'
   | 'scandinavian-service'
+  | 'warm-bistro'
   | 'modern-saas'
   | 'creative-studio'
   | 'future-minimal'

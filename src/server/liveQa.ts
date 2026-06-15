@@ -30,7 +30,7 @@ function knownRoutesOf(spec: ProjectSpec): string[] {
 export async function makeLiveQa(): Promise<LiveQa> {
   const pagesMap = new Map<string, string>();
   const server: Server = createServer((req, res) => {
-    const u = (req.url ?? '/').split('?')[0];
+    const u = (req.url ?? '/').split('?')[0] ?? '/';
     const k = u === '/index.html' ? '/' : u;
     const html = pagesMap.get(k);
     if (html !== undefined) {

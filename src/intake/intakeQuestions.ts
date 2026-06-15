@@ -10,6 +10,7 @@
  * Tier "balanced": domande personalizzate richiedono un modello capace.
  */
 import { type LLMProvider, type Result, ok, err } from '@core';
+import { recommendedThemeFromDescription } from './industryEngine.js';
 
 export interface IntakeQuestion {
   readonly question: string;
@@ -26,10 +27,11 @@ const SYSTEM = [
   'VIDEO: se l attivita MOSTRA o PRODUCE video (videomaker, regista, filmmaker, fotografo con reel, casa di produzione, content creator, musicista), AGGIUNGI una domanda a TESTO LIBERO (senza opzioni) in cui chiedi di incollare i link YouTube dei video da mostrare, UNO PER RIGA, precisando che puo lasciare vuoto se non li ha ancora pronti. Non inventare i link.',
   'Ogni domanda: breve, concreta, riferita alla SUA attivita. Quando ha senso proponi 2-4 opzioni rapide e concrete (la persona potra comunque scrivere una risposta libera).',
   'NON chiedere dettagli tecnici (hosting, dominio, codice, email di recapito): quelli si impostano altrove.',
-  'Inoltre scegli lo STILE visivo piu adatto all attivita, tra questi 8 (usa ESATTAMENTE questi id):',
+  'Inoltre scegli lo STILE visivo piu adatto all attivita, tra questi temi (usa ESATTAMENTE questi id):',
   '- editorial-luxury: lusso editoriale ed eleganza (hotel e ristoranti raffinati, moda, beauty, gioielli).',
   '- athletic-premium: energia e movimento (palestre, fitness, sport, performance, wellness attivo).',
-  '- scandinavian-service: pulito e professionale (avvocati, commercialisti, architetti, medici, consulenti, professionisti).',
+    '- scandinavian-service: pulito e professionale (professionisti, servizi locali, consulenti).',
+    '- warm-bistro: caldo e food-first (pizzerie, trattorie, bar, panifici, pasticcerie, food casual).',
   '- modern-saas: software e digitale (app, piattaforme, startup tech, gestionali, prodotti SaaS).',
   '- creative-studio: creativi e portfolio (agenzie, designer, fotografi, videomaker, brand).',
   '- future-minimal: minimale e tecnologico (AI, prodotti innovativi, tech d avanguardia).',
@@ -50,8 +52,6 @@ function stripToJson(raw: string): string {
   return s;
 }
 
-const VALID_STYLES = new Set(['editorial-luxury', 'athletic-premium', 'scandinavian-service', 'modern-saas', 'creative-studio', 'future-minimal', 'modern-community', 'industrial-bold']);
-
 export async function planIntakeQuestions(args: {
   readonly description: string;
   readonly llm: LLMProvider;
@@ -65,11 +65,8 @@ export async function planIntakeQuestions(args: {
   if (!res.ok) return err(res.error);
 
   const out: IntakeQuestion[] = [];
-  let recommendedStyle: string | null = null;
   try {
-    const p = JSON.parse(stripToJson(res.value.text)) as { questions?: unknown; recommendedStyle?: unknown };
-    const st = typeof p.recommendedStyle === 'string' ? p.recommendedStyle.trim() : '';
-    if (VALID_STYLES.has(st)) recommendedStyle = st;
+    const p = JSON.parse(stripToJson(res.value.text)) as { questions?: unknown };
     const arr = Array.isArray(p.questions) ? p.questions : [];
     for (const q of arr.slice(0, 8)) {
       if (!q || typeof q !== 'object') continue;
@@ -83,5 +80,12 @@ export async function planIntakeQuestions(args: {
   } catch {
     // descrizione gia sufficiente o output non interpretabile: nessuna domanda
   }
+
+  // Lo STILE proposto NON e lasciato all'LLM (spingeva tutto su editorial-luxury):
+  // e deterministico e riusa la stessa logica keyword del livello decisionale, cosi la
+  // proposta dell'intake coincide col tema che il generatore userebbe. L'LLM resta solo
+  // per le domande. Eventuale recommendedStyle nel JSON dell'LLM viene ignorato.
+  const recommendedStyle = recommendedThemeFromDescription(args.description);
+  console.log('  → intake_recommended_style: ' + recommendedStyle + ' [source: deterministic] · intake_description_excerpt: ' + JSON.stringify(args.description.slice(0, 80)));
   return ok({ questions: out, recommendedStyle });
 }

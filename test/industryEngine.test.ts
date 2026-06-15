@@ -11,6 +11,7 @@ import {
   detectIndustry,
   creativeDirectionForIndustry,
   creativeDirectionFromDescription,
+  recommendedThemeFromDescription,
   creativeNotesFor,
   preferredTheme,
   INDUSTRY_SEEDS,
@@ -238,4 +239,122 @@ test('recommendedTheme non valido → fallback sicuro al default', () => {
   const pref = preferredTheme(undefined, bogus, isTheme);
   assert.equal(pref.theme, null);
   assert.equal(pref.source, 'default');
+});
+
+// --- Micro-patch tema: recommendedThemeFromDescription (varietà, anti-noir) ---
+
+test('tema: ristorazione casual → scandinavian-service di default, warm-bistro con BRIK_THEME_BISTRO=on', () => {
+  const prev = process.env.BRIK_THEME_BISTRO;
+  delete process.env.BRIK_THEME_BISTRO;
+  assert.equal(recommendedThemeFromDescription('Pizzeria di quartiere a Napoli'), 'scandinavian-service');
+  assert.equal(recommendedThemeFromDescription('Trattoria familiare con cucina casalinga'), 'scandinavian-service');
+  process.env.BRIK_THEME_BISTRO = 'on';
+  assert.equal(recommendedThemeFromDescription('Pizzeria di quartiere a Napoli'), 'warm-bistro');
+  assert.equal(recommendedThemeFromDescription('Trattoria familiare con cucina casalinga'), 'warm-bistro');
+  assert.equal(recommendedThemeFromDescription('Panificio artigianale con colazioni'), 'warm-bistro');
+  if (prev == null) delete process.env.BRIK_THEME_BISTRO; else process.env.BRIK_THEME_BISTRO = prev;
+});
+
+test('tema: ristorazione fascia alta / chef → editorial-luxury', () => {
+  assert.equal(recommendedThemeFromDescription('Ristorante gourmet con menu degustazione'), 'editorial-luxury');
+  assert.equal(recommendedThemeFromDescription('Fine dining dello chef stellato'), 'editorial-luxury');
+  assert.equal(recommendedThemeFromDescription('Percorso di degustazione e alta cucina'), 'editorial-luxury');
+});
+
+test('tema: pet grooming → scandinavian-service, pet spa di lusso → editorial-luxury', () => {
+  assert.equal(recommendedThemeFromDescription('Toelettatura cani e gatti'), 'scandinavian-service');
+  assert.equal(recommendedThemeFromDescription('Pet spa di lusso per cani'), 'editorial-luxury');
+});
+
+test('tema: dentista moderno → non editorial-luxury', () => {
+  const theme = recommendedThemeFromDescription('Studio dentistico moderno, ortodonzia e igiene');
+  assert.notEqual(theme, 'editorial-luxury');
+  assert.equal(theme, 'scandinavian-service');
+});
+
+test('tema: noleggio auto generico → scandinavian-service', () => {
+  assert.equal(recommendedThemeFromDescription('Noleggio auto a breve termine in aeroporto'), 'scandinavian-service');
+  assert.equal(recommendedThemeFromDescription('Autonoleggio economico in città'), 'scandinavian-service');
+});
+
+test('tema: noleggio furgoni / flotte / macchinari → industrial-bold', () => {
+  assert.equal(recommendedThemeFromDescription('Noleggio furgoni per traslochi'), 'industrial-bold');
+  assert.equal(recommendedThemeFromDescription('Gestione flotte aziendali e mezzi da lavoro'), 'industrial-bold');
+  assert.equal(recommendedThemeFromDescription('Noleggio macchinari per cantieri'), 'industrial-bold');
+});
+
+test('tema: noleggio supercar → athletic-premium (editorial-luxury solo se lusso esplicito)', () => {
+  assert.equal(recommendedThemeFromDescription('Noleggio supercar e auto sportive'), 'athletic-premium');
+  assert.equal(recommendedThemeFromDescription('Noleggio supercar di lusso esclusive'), 'editorial-luxury');
+});
+
+test('tema: SaaS / software / AI → modern-saas', () => {
+  assert.equal(recommendedThemeFromDescription('SaaS di intelligenza artificiale per le vendite'), 'modern-saas');
+  assert.equal(recommendedThemeFromDescription('Software gestionale b2b con dashboard'), 'modern-saas');
+});
+
+test('tema: fotografo / portfolio → creative-studio', () => {
+  assert.equal(recommendedThemeFromDescription('Fotografo con portfolio di matrimoni'), 'creative-studio');
+  assert.equal(recommendedThemeFromDescription('Studio di branding e art direction'), 'creative-studio');
+});
+
+test('tema: fitness / sport → athletic-premium', () => {
+  assert.equal(recommendedThemeFromDescription('Palestra e personal trainer'), 'athletic-premium');
+  assert.equal(recommendedThemeFromDescription('Centro padel e campi da tennis'), 'athletic-premium');
+});
+
+test('tema: architettura / finanza → future-minimal; consulenza premium → future-minimal', () => {
+  assert.equal(recommendedThemeFromDescription('Studio di architettura e innovazione'), 'future-minimal');
+  assert.equal(recommendedThemeFromDescription('Consulenza fintech e finanza d\'impresa'), 'future-minimal');
+  assert.equal(recommendedThemeFromDescription('Consulenza premium per top management'), 'future-minimal');
+});
+
+test('tema: consulenza generica → scandinavian-service', () => {
+  assert.equal(recommendedThemeFromDescription('Consulenza strategica e business advisory per PMI'), 'scandinavian-service');
+});
+
+test('tema: associazioni / eventi / community → modern-community', () => {
+  assert.equal(recommendedThemeFromDescription('Associazione culturale che organizza eventi'), 'modern-community');
+  assert.equal(recommendedThemeFromDescription('Spazio di coworking e community di professionisti'), 'modern-community');
+});
+
+test('tema: descrizione vuota / generica → scandinavian-service (mai noir)', () => {
+  assert.equal(recommendedThemeFromDescription(''), 'scandinavian-service');
+  assert.equal(recommendedThemeFromDescription('Negozio di fiori online'), 'scandinavian-service');
+  assert.equal(recommendedThemeFromDescription('Attività commerciale generica'), 'scandinavian-service');
+});
+
+test('regressione anti-noir: set vario non torna editorial-luxury senza keyword luxury/fine dining', () => {
+  const varied = [
+    'Pizzeria di quartiere',
+    'Studio dentistico moderno',
+    'Noleggio auto economico',
+    'Palestra di crossfit',
+    'Software gestionale per negozi',
+    'Fotografo di ritratti',
+    'Associazione sportiva dilettantistica',
+    'Idraulico e installazioni',
+    'Parrucchiere per signora',
+    'Negozio di abbigliamento',
+  ];
+  for (const d of varied) {
+    assert.notEqual(recommendedThemeFromDescription(d), 'editorial-luxury', `inatteso noir per: ${d}`);
+  }
+  // Controprova: le keyword esplicite SÌ devono dare editorial-luxury
+  assert.equal(recommendedThemeFromDescription('Ristorante gourmet stellato'), 'editorial-luxury');
+  assert.equal(recommendedThemeFromDescription('Hotel 5 stelle di lusso'), 'editorial-luxury');
+});
+
+test('integrazione: creativeDirectionFromDescription + preferredTheme propagano il tema', () => {
+  const prev = process.env.BRIK_THEME_BISTRO;
+  delete process.env.BRIK_THEME_BISTRO;
+  const cd = creativeDirectionFromDescription('Pizzeria di quartiere');
+  assert.equal(cd.recommendedTheme, 'scandinavian-service');
+  const pref = preferredTheme(undefined, cd, isTheme);
+  assert.equal(pref.theme, 'scandinavian-service');
+  process.env.BRIK_THEME_BISTRO = 'on';
+  const cdBistro = creativeDirectionFromDescription('Pizzeria di quartiere');
+  assert.equal(cdBistro.recommendedTheme, 'warm-bistro');
+  if (prev == null) delete process.env.BRIK_THEME_BISTRO; else process.env.BRIK_THEME_BISTRO = prev;
+  assert.equal(pref.source, 'creative_direction');
 });

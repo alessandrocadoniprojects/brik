@@ -17,6 +17,24 @@ export interface SavedCreativeDirection {
 
 export type SiteStatus = 'preview' | 'approved' | 'published' | 'locked';
 
+export interface ThemeOverrides {
+  readonly bg?: string;
+  readonly paper?: string;
+  readonly surface?: string;
+  readonly surface2?: string;
+  readonly ink?: string;
+  readonly ink2?: string;
+  readonly ink3?: string;
+  readonly muted?: string;
+  readonly line?: string;
+  readonly accent?: string;
+  readonly accent2?: string;
+  readonly accent3?: string;
+  readonly accentInk?: string;
+  readonly radius?: string;
+  readonly radiusLg?: string;
+}
+
 export interface SiteState {
   readonly id: string;
   readonly spec: ProjectSpec; // contratto (criteri con route)
@@ -36,6 +54,8 @@ export interface SiteState {
   readonly editCount?: number;
   /** Direzione creativa congelata alla creazione, per la finalizzazione premium al publish. */
   readonly creativeDirection?: SavedCreativeDirection;
+  /** Override visuali persistenti richiesti dall'utente via chat (token del design system). */
+  readonly themeOverrides?: ThemeOverrides;
   /** Fast Preview: route interne ancora in preparazione (placeholder). Vuoto/assente = sito completo. */
   readonly pendingRoutes?: readonly string[];
   /** Fast Preview: la home e renderizzabile ma il QA in background non e diventato verde. */
@@ -48,6 +68,7 @@ export interface SiteHistoryEntry {
   readonly statements: readonly string[];
   readonly routes: readonly SiteRoute[];
   readonly pages: readonly SitePage[];
+  readonly themeOverrides?: ThemeOverrides;
   readonly note: string;
   readonly at: string;
 }

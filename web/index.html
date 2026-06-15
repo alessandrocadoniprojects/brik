@@ -2,76 +2,338 @@
 <html lang="it">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>brik — studio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Brik — il sito della tua attività, descritto a parole</title>
+  <meta name="description" content="Crea il sito della tua attività descrivendolo a parole: testi, immagini, pagine e contatti generati in pochi minuti. Hosting, dominio e assistenza inclusi." />
+  <link rel="canonical" href="https://thebrik.it/" />
+  <meta property="og:title" content="Brik — il sito della tua attività, descritto a parole" />
+  <meta property="og:description" content="Da una frase a un sito completo in pochi minuti. Hosting, aggiornamenti e assistenza inclusi." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://thebrik.it/" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Hanken+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/marketing.css" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","name":"Brik","url":"https://thebrik.it/","logo":"https://thebrik.it/brik-logo.png"},{"@type":"WebSite","name":"Brik","url":"https://thebrik.it/"},{"@type":"SoftwareApplication","name":"Brik","applicationCategory":"BusinessApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"149","priceCurrency":"EUR"}}]}</script>
+  <style id="ob-styles">
+  /* Guided Onboarding v1 — Step 2: micro-label. Isolato (.ob-*), tarato sullo style.css reale (tema dark, breakpoint 820px). */
+  .ob-label,.ob-note{display:none;font-size:11px;line-height:1.2;color:var(--ink-soft);margin-top:3px;text-align:center;font-weight:400;letter-spacing:0}
+  .ob-label{max-width:118px}
+  .ob-note{max-width:170px;margin-top:5px}
+  .ob-wrap{display:inline-flex;flex-direction:column;align-items:center}
+  /* label visibile solo con Guida ON e bottone non nascosto (publishBtn si nasconde in Modifica) */
+  body.ob-guide-on .ob-wrap:has(> button:not([hidden])) .ob-label{display:block}
+  body.ob-guide-on .ob-note{display:block}
+  #guideToggle.ob-on{color:var(--accent);border-color:var(--accent)}
+  /* FIX tab mobile: preservo il flex:1 delle .mtab che il wrapper toglierebbe */
+  .mobile-tabs .ob-wrap{flex:1;align-items:stretch}
+  .mobile-tabs .ob-wrap .mtab{width:100%}
+  @media (max-width:820px){
+    /* su mobile #editBtn è display:none: nascondo il suo wrapper -> niente label orfana, niente doppione con la tab */
+    #obEditWrap{display:none}
+    .ob-label,.ob-note{font-size:10px;max-width:122px}
+  }
+  /* Guided Onboarding — tip one-shot ancorato al toggle "Guida" (z-index 80: sopra topbar 10, sotto modale 100) */
+  .ob-tip{position:fixed;z-index:80;max-width:262px;width:max-content;background:var(--panel-2);border:1px solid var(--line-2);border-radius:12px;padding:14px;box-shadow:0 16px 40px rgba(0,0,0,.34);color:var(--ink)}
+  .ob-tip[hidden]{display:none}
+  .ob-tip-text{margin:0 0 12px;font-size:13px;line-height:1.4;color:var(--ink-soft)}
+  .ob-tip-ok{width:100%}
+  .ob-tip-arrow{position:absolute;width:12px;height:12px;background:var(--panel-2);border-left:1px solid var(--line-2);border-top:1px solid var(--line-2);transform:rotate(45deg);top:-7px;left:20px}
+  </style>
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="mark">brik</span>
+      <img class="brand-logo" src="/brik-logo.png" alt="brik" />
       <span class="tag">studio</span>
     </div>
     <div class="top-actions">
-      <select id="projectSelect" class="select" aria-label="Progetti">
-        <option value="">— progetti —</option>
-      </select>
-      <button id="newBtn" class="btn ghost">Nuovo</button>
+      <div id="projWrap" class="proj-wrap">
+        <button id="projBtn" class="btn ghost proj-btn" type="button" aria-haspopup="true" aria-expanded="false">— progetti — <span class="caret">▾</span></button>
+        <div id="projMenu" class="proj-menu" hidden></div>
+      </div>
+      <button id="settingsBtn" class="btn ghost" disabled aria-label="Impostazioni"><span class="btn-text">Impostazioni</span><svg class="btn-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      <button id="guideToggle" class="btn ghost" type="button" aria-pressed="true" title="Mostra/nascondi le spiegazioni dei pulsanti"><span class="btn-text">Guida</span><svg class="btn-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></button>
+      <button id="newBtn" class="btn ghost"><span class="btn-text">Nuovo</span><svg class="btn-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
     </div>
   </header>
+
+  <section id="landing" class="landing mkt" aria-label="brik">
+    <nav class="nav">
+      <div class="nav-inner">
+        <a class="nav-logo" href="#landing-hero"><img src="/brik-logo.png" alt="brik" /></a>
+        <div class="nav-links">
+          <a href="/how-it-works">Come funziona</a>
+          <a href="/templates">Modelli</a>
+          <a href="/pricing">Prezzi</a>
+          <a href="/?login=1">Accedi</a>
+          <a class="btn btn-primary nav-cta" href="#landing-hero">Crea il sito</a>
+        </div>
+      </div>
+    </nav>
+
+    <header class="hero wrap" id="landing-hero">
+      <h1>Il sito della tua attività, <span class="grad-text">in pochi minuti</span>.</h1>
+      <p class="lead">Da una semplice descrizione, Brik genera un sito completo: testi, immagini, pagine e contatti.</p>
+      <form id="landingForm" class="promptbox" autocomplete="off">
+        <textarea id="landingInput" rows="2" placeholder="Descrivi la tua attività… es. «Pizzeria a Verona con forno a legna»"></textarea>
+        <div class="row"><button id="landingGo" class="btn btn-primary" type="submit">Crea il mio sito</button></div>
+      </form>
+      <p class="hero-note"><b>Nessuna carta richiesta</b> · provi gratis</p>
+      <div id="landingChips" class="chips">
+        <button type="button" class="chip landing-chip">Pizzeria a Verona, forno a legna, menù e contatti</button>
+        <button type="button" class="chip landing-chip">Studio dentistico a Milano</button>
+        <button type="button" class="chip landing-chip">Personal trainer online</button>
+        <button type="button" class="chip landing-chip">B&amp;B sul lago di Como</button>
+        <button type="button" class="chip landing-chip">Parrucchiere a Torino: servizi e prenotazione</button>
+      </div>
+    </header>
+
+    <section class="section wrap">
+      <div class="section-head">
+        <span class="eyebrow">Come funziona</span>
+        <h2>Dal testo al sito in tre passaggi</h2>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="step-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div class="step-n">01 — Descrivi</div><h3>Racconta l'attività</h3><p>Una frase basta. Aggiungi foto o il tuo sito attuale se vuoi.</p></div>
+        <div class="step"><div class="step-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3m9-9h-3M6 12H3m13.5-6.5L14 8m-4 8-2.5 2.5m9 0L14 16m-4-8L7.5 5.5"/><circle cx="12" cy="12" r="3.2"/></svg></div><div class="step-n">02 — Genera</div><h3>Brik costruisce tutto</h3><p>Testi, immagini e pagine, verificati nel browser.</p></div>
+        <div class="step"><div class="step-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5 3 21l4.5-1.5M12 15l-3-3m9.5-7.5c-2 0-6 1-9 4l-3 3 4 4 3-3c3-3 4-7 4-9z"/><circle cx="15" cy="9" r="1.3"/></svg></div><div class="step-n">03 — Pubblica</div><h3>Vai online subito</h3><p>Pubblichi con un click, oppure modifichi quando vuoi.</p></div>
+      </div>
+    </section>
+
+    <section class="section wrap">
+      <div class="section-head"><span class="eyebrow">Tutto incluso</span><h2>Non solo il sito</h2><p class="lead">Un prezzo, zero sorprese: dalla creazione alla messa online.</p></div>
+      <div class="grid-3">
+        <div class="card"><div class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></div><h3>Template di alto livello</h3><p>Partiamo da basi di design professionali e le adattiamo alla tua attività.</p></div>
+        <div class="card"><div class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg></div><h3>Mobile first</h3><p>Perfetto su smartphone, tablet e desktop.</p></div>
+        <div class="card"><div class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16a4 4 0 0 1 .9-7.9A5.5 5.5 0 0 1 16 7a4.5 4.5 0 0 1 1 8.9"/></svg></div><h3>Hosting incluso</h3><p>Non devi configurare nulla: ci pensiamo noi.</p></div>
+        <div class="card"><div class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg></div><h3>Dominio personalizzato</h3><p>Colleghi il tuo dominio quando vuoi.</p></div>
+        <div class="card"><div class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 4v4h-4"/></svg></div><h3>Revisioni illimitate</h3><p>Aggiorni testi, foto e sezioni ogni volta che vuoi.</p></div>
+        <div class="card"><div class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><h3>Assistenza italiana</h3><p>Supporto rapido, in italiano, quando ti serve.</p></div>
+      </div>
+    </section>
+
+    <section class="section wrap">
+      <div class="section-head"><span class="eyebrow">Confronto</span><h2>Perché spendere migliaia di euro?</h2></div>
+      <div class="cmp">
+        <div class="cmp-row cmp-head"><div></div><div class="brik">Brik</div><div>Agenzia</div></div>
+        <div class="cmp-row"><div class="feat">Creazione del sito</div><div class="brik">Inclusa</div><div class="other">Inclusa</div></div>
+        <div class="cmp-row"><div class="feat">Hosting</div><div class="brik">Incluso</div><div class="other">Extra</div></div>
+        <div class="cmp-row"><div class="feat">Modifiche</div><div class="brik">Illimitate</div><div class="other">A pagamento</div></div>
+        <div class="cmp-row"><div class="feat">Tempo di consegna</div><div class="brik">Minuti</div><div class="other">Settimane</div></div>
+        <div class="cmp-row"><div class="feat">Prezzo iniziale</div><div class="brik">149€</div><div class="other">1000€+</div></div>
+      </div>
+    </section>
+
+    <section class="section wrap">
+      <div class="section-head"><span class="eyebrow">Prezzo</span><h2>Un prezzo semplice</h2><p class="lead">Nessun costo nascosto.</p></div>
+      <div class="price-grid">
+        <div class="price feature">
+          <div class="ptag">Primo anno</div>
+          <div class="amount">149€ <small>/ primo anno</small></div>
+          <p class="psub">Tutto per andare online, una volta sola.</p>
+          <ul class="checks">
+            <li>Creazione del sito</li><li>Hosting e SSL</li><li>Dominio personalizzato</li><li>Revisioni illimitate</li><li>Aggiornamenti e backup</li><li>Pubblicazione + assistenza</li>
+          </ul>
+          <a class="btn btn-primary btn-lg" href="#landing-hero">Crea il mio sito</a>
+        </div>
+        <div class="price">
+          <div class="ptag">Dal secondo anno</div>
+          <div class="amount">49€ <small>/ anno</small></div>
+          <p class="psub">Per tenere il sito online e curato.</p>
+          <ul class="checks"><li>Hosting e dominio</li><li>Manutenzione</li><li>Aggiornamenti</li><li>Assistenza</li></ul>
+          <a class="btn btn-ghost btn-lg" href="/pricing">Dettagli prezzi</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section wrap">
+      <div class="section-head"><span class="eyebrow">FAQ</span><h2>Domande frequenti</h2></div>
+      <div class="faq">
+        <details><summary>Posso modificare il sito?</summary><div class="ans">Sì, in qualsiasi momento: cambi testi e foto direttamente, e per modifiche più grandi scrivi cosa vuoi e Brik lo applica.</div></details>
+        <details><summary>Posso usare il mio dominio?</summary><div class="ans">Sì. Colleghi il tuo dominio quando sei pronto a pubblicare.</div></details>
+        <details><summary>Quanto tempo serve?</summary><div class="ans">Pochi minuti per la prima bozza, poi la rifinisci parlando.</div></details>
+        <details><summary>Devo saper programmare?</summary><div class="ans">No. Tutto avviene in parole semplici, niente codice.</div></details>
+        <details><summary>Posso cancellare il servizio?</summary><div class="ans">Sì, quando vuoi, senza vincoli.</div></details>
+        <details><summary>Le modifiche sono davvero illimitate?</summary><div class="ans">Sì: aggiorni testi, foto e sezioni tutte le volte che ti serve.</div></details>
+      </div>
+    </section>
+
+    <section class="cta-band">
+      <div class="wrap">
+        <h2>La tua attività merita di essere online</h2>
+        <p class="lead">Descrivila in una frase. Al resto pensa Brik.</p>
+        <a class="btn btn-primary btn-lg" href="#landing-hero">Crea il mio sito</a>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <div class="foot-inner">
+        <div class="foot-brand"><a class="nav-logo" href="#landing-hero"><img src="/brik-logo.png" alt="brik" /></a><p>Il sito della tua attività, descritto a parole. Creato, verificato e pubblicato in pochi minuti.</p><p class="foot-legal">Atlantix Srl · P.IVA 11262860965<br>Via Imperia, 43 — 20142 Milano</p></div>
+        <div><h4>Prodotto</h4><a href="/how-it-works">Come funziona</a><a href="/templates">Modelli</a><a href="/pricing">Prezzi</a></div>
+        <div><h4>Inizia</h4><a href="#landing-hero">Crea il sito</a><a href="/?login=1">Accedi</a></div>
+      </div>
+      <div class="foot-fine"><div class="wrap"><span>© 2026 Brik</span><span>Fatto in Italia</span></div></div>
+    </footer>
+  </section>
 
   <main class="grid">
     <!-- CHAT -->
     <section class="chat" aria-label="Conversazione">
       <div id="messages" class="messages">
         <div class="msg bot intro">
-          <p class="lead">Descrivi il sito che vuoi.</p>
-          <p class="muted">Es. «Sito per la pizzeria Da Ciro: home con slogan “Forno a legna dal 1980”, pagina menù con Margherita, Marinara, Diavola, e una pagina contatti con form nome/email/messaggio che mostra “Grazie, a presto”.»</p>
+          <p class="lead">Raccontami la tua attività e che sito vuoi.</p>
+          <p class="muted">Ti preparo una <strong>prima bozza</strong> in un paio di minuti, poi la rifiniamo insieme — testi, sezioni, colori, foto. Es. «Pizzeria Da Ciro a Verona: forno a legna dal 1980, pagina menù e contatti».</p>
         </div>
       </div>
       <form id="composer" class="composer">
-        <div class="composer-fields">
-          <input id="ownerEmail" class="email-input" type="email" placeholder="Email dove ricevere i messaggi del form" autocomplete="email" />
-          <textarea id="input" rows="2" placeholder="Descrivi il sito…" autocomplete="off"></textarea>
+        <div id="attachList" class="attach-list" hidden></div>
+        <textarea id="input" rows="1" placeholder="Racconta la tua attività…" autocomplete="off"></textarea>
+        <div class="composer-bar">
+          <button id="attachBtn" class="mic-btn attach-btn" type="button" aria-label="Allega" title="Allega: immagine, file o sito (URL)">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.49-8.49"/></svg>
+          </button>
+          <button id="send" class="btn accent" type="submit">Invia</button>
         </div>
-        <button id="send" class="btn accent" type="submit">Invia</button>
+        <input id="fileInput" type="file" multiple hidden accept=".txt,.md,.markdown,.csv,.pdf,.docx,.png,.jpg,.jpeg,.webp,.gif,text/plain,text/markdown,text/csv,application/pdf,application/json,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,image/webp,image/gif">
       </form>
     </section>
 
     <!-- ANTEPRIMA -->
     <section class="preview" aria-label="Anteprima">
       <div class="toolbar">
-        <div class="status">
-          <span id="statusPill" class="pill empty">nessun progetto</span>
-          <span id="versionTag" class="ver"></span>
-        </div>
+        <span id="statusPill" class="pill empty" hidden>nessun progetto</span>
         <nav id="routes" class="routes" aria-label="Pagine"></nav>
+        <button id="addSectionTop" class="btn ghost" type="button" hidden>+ Sezione</button>
         <div class="actions">
+          <span class="ob-wrap" id="obEditWrap"><button id="editBtn" class="btn ghost" disabled>Modifica</button><span class="ob-label">Scrivi cosa vuoi cambiare.</span></span>
           <button id="revertBtn" class="btn ghost" disabled>Annulla ultima</button>
-          <button id="approveBtn" class="btn" disabled>Approva</button>
-          <button id="publishBtn" class="btn accent" disabled>Pubblica</button>
+          <span class="ob-wrap"><button id="publishBtn" class="btn accent" disabled>Visita il sito</button><span class="ob-label">Pubblica il sito su un link condivisibile.</span></span>
         </div>
+        <span id="versionTag" class="ver" hidden></span>
+      </div>
+      <div id="askbar" class="askbar" hidden>
+        <button id="askCollapse" class="askbar-collapse" type="button" aria-label="Chiudi">⌄</button>
+        <div id="askLog" class="askbar-log" aria-live="polite"></div>
+        <form id="askForm" class="askbar-form">
+          <textarea id="askInput" rows="1" placeholder="Scrivi una modifica…" autocomplete="off"></textarea>
+          <button id="askSend" class="btn accent" type="submit">Invia</button>
+        </form>
       </div>
       <div class="frame-wrap">
         <div id="placeholder" class="placeholder">
           <div class="ph-inner">
-            <span class="ph-mark">brik</span>
+            <img class="ph-logo" src="/favicon.png" alt="brik" />
             <p>L'anteprima del sito comparirà qui.</p>
           </div>
         </div>
         <iframe id="frame" title="Anteprima sito" sandbox="allow-scripts allow-forms allow-same-origin allow-popups" hidden></iframe>
+        <div id="ctxbar" class="ctxbar" hidden></div>
+        <div id="imgpanel" class="imgpanel" hidden></div>
         <div id="busy" class="busy" hidden>
           <div class="spinner"></div>
           <p id="busyText">Sto costruendo…</p>
-          <p class="muted small">Generazione + verifica reale nel browser: può richiedere fino a un minuto.</p>
+          <div class="progress"><div id="busybar" class="progress-fill"></div></div>
+          <p class="muted small">tempo trascorso: <span id="busytime">0s</span> · genera e verifica nel browser, può richiedere qualche minuto</p>
         </div>
       </div>
     </section>
   </main>
 
+  <div id="mobileTabs" class="mobile-tabs">
+    <span class="ob-wrap"><button type="button" class="mtab active" data-view="modifica">Modifica</button><span class="ob-note">Scrivi cosa vuoi cambiare.</span></span>
+    <span class="ob-wrap"><button type="button" class="mtab" data-view="preview">Anteprima</button><span class="ob-note">Vedi il sito come lo vedranno i clienti.</span></span>
+  </div>
+
+  <div id="settings" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <div class="set-head-left"><img class="set-logo" src="/brik-logo.png" alt="brik" /><h3>Impostazioni sito</h3></div>
+        <button id="settingsClose" class="icon-btn" aria-label="Chiudi">×</button>
+      </div>
+      <div class="set-row set-status-row">
+        <label>Stato</label>
+        <span id="settingsStatus" class="set-control" style="color:var(--ink-soft);font-size:13px;"></span>
+      </div>
+
+      <details class="set-group" open>
+        <summary>Stili</summary>
+        <div class="set-group-body">
+          <div class="set-row">
+            <label for="themeSelect">Stile</label>
+            <select id="themeSelect" class="select">
+              <option value="editorial-luxury">Editorial Luxury</option>
+              <option value="athletic-premium">Athletic Premium</option>
+              <option value="scandinavian-service">Scandinavian Service</option>
+              <option value="warm-bistro">Warm Bistro</option>
+              <option value="modern-saas">Modern SaaS</option>
+              <option value="creative-studio">Creative Studio</option>
+              <option value="future-minimal">Future Minimal</option>
+              <option value="modern-community">Modern Community</option>
+              <option value="industrial-bold">Industrial Bold</option>
+            </select>
+          </div>
+          <div class="set-row" style="margin-bottom:0">
+            <label>Colore principale</label>
+            <div class="set-control">
+              <span id="accentSwatches" class="swatches"></span>
+              <input id="accentColor" type="color" class="accent-color" value="#5B8CFF" aria-label="Colore personalizzato" />
+            </div>
+            <p class="set-note" style="margin:6px 0 0">Lo stile e il colore si applicano subito. Su alcuni stili il colore tocca solo i dettagli.</p>
+          </div>
+        </div>
+      </details>
+
+      <details class="set-group">
+        <summary>Info aziendali</summary>
+        <div class="set-group-body">
+          <div class="set-row">
+            <label for="ownerEmailInput">Email di recapito del modulo</label>
+            <input id="ownerEmailInput" class="text-input" type="email" placeholder="tua@email.it" />
+          </div>
+          <div class="set-row" style="margin-bottom:0">
+            <label>Dati legali (footer)</label>
+            <p class="set-note" style="margin:0 0 8px">Mostrati nel footer dei siti pubblicati. Facoltativi: per le attività con P.IVA è consigliato compilarli.</p>
+            <input id="legalNameInput" class="text-input" type="text" placeholder="Ragione sociale (es. Mario Rossi S.r.l.)" style="margin-bottom:8px" />
+            <input id="legalVatInput" class="text-input" type="text" placeholder="P.IVA (es. 01234567890)" spellcheck="false" autocapitalize="off" style="margin-bottom:8px" />
+            <input id="legalAddrInput" class="text-input" type="text" placeholder="Indirizzo (es. Via Roma 1, Milano)" />
+          </div>
+        </div>
+      </details>
+
+      <details class="set-group">
+        <summary>Dominio</summary>
+        <div class="set-group-body">
+          <div class="set-row" id="addrRow" hidden>
+            <label for="ownerAddrInput">Indirizzo attuale del sito (già pubblicato)</label>
+            <div class="set-control">
+              <input id="ownerAddrInput" class="text-input" type="text" spellcheck="false" autocapitalize="off" />
+              <span style="color:var(--ink-faint);font-size:13px;white-space:nowrap">.pages.dev</span>
+              <button id="addrSave" class="btn ghost">Cambia</button>
+            </div>
+            <p class="set-note" id="addrNote" style="margin:6px 0 0"></p>
+            <p class="set-note" style="margin:4px 0 0">Cambiando indirizzo il sito viene ripubblicato sul nuovo. Il vecchio indirizzo può restare attivo finché non lo rimuovi da Cloudflare.</p>
+          </div>
+          <div class="set-row" style="margin-bottom:0">
+            <label>Dominio ufficiale</label>
+            <p class="set-note" style="margin:0 0 8px">Vuoi un indirizzo tuo, tipo <strong>nomeazienda.it</strong>, al posto di .pages.dev? Lo attiviamo noi: tu non tocchi nulla di tecnico.</p>
+            <button id="conciergeBtn" class="btn ghost" type="button">Richiedi un dominio ufficiale</button>
+          </div>
+        </div>
+      </details>
+
+      <p id="settingsMsg" class="set-note" style="margin:8px 0 0"></p>
+      <button id="settingsSave" class="btn accent settings-save" type="button">Salva impostazioni</button>
+    </div>
+  </div>
+
   <script src="/app.js" type="module"></script>
+  <div id="guideTip" class="ob-tip" hidden role="dialog" aria-label="Suggerimento guida">
+    <div class="ob-tip-arrow"></div>
+    <p class="ob-tip-text">Le spiegazioni sui pulsanti sono attive. Puoi spegnerle quando vuoi da qui.</p>
+    <button type="button" class="btn accent ob-tip-ok">Ho capito</button>
+  </div>
 </body>
 </html>

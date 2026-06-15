@@ -33,10 +33,83 @@ import type { EditConflict } from '../orchestrator/edit.js';
 import type { SecurityScanner } from '../security/scanner.js';
 import { scanSite, summarizeSite, type SiteScanReport, type SiteSummary } from './site.js';
 import type { SiteStore } from './siteStore.js';
-import type { SiteFile, SiteState, SiteHistoryEntry, SavedCreativeDirection } from './siteTypes.js';
+import type { SiteFile, SiteState, SiteHistoryEntry, SavedCreativeDirection, ThemeOverrides } from './siteTypes.js';
 
 const HISTORY_MAX = 10;
 const now = (): string => new Date().toISOString();
+
+
+type FoodGenome = {
+  readonly archetype: 'pz-napoli' | 'pz-osteria' | 'pz-pop' | 'pz-minimal' | 'pz-family' | 'pz-night';
+  readonly heroPattern: string;
+  readonly menuPattern: string;
+  readonly sectionOrder: string;
+  readonly imageStrategy: string;
+  readonly density: string;
+};
+
+function hashText(input: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function foodDesignGenome(description: string, id: string): FoodGenome {
+  const d = description.toLowerCase();
+  const h = hashText(description + '|' + id);
+  let archetype: FoodGenome['archetype'];
+
+  if (/osteria|trattoria|vino|vini|naturali|serale|cena|cocktail|padellino/.test(d)) archetype = /cocktail|notte|serale|vini/.test(d) ? 'pz-night' : 'pz-osteria';
+  else if (/giovane|pop|social|colorat|birr|craft|milano|street|asporto|taglio/.test(d)) archetype = 'pz-pop';
+  else if (/minimal|contemporane|essenziale|pochi ingredienti|selezionat|roma/.test(d)) archetype = 'pz-minimal';
+  else if (/famiglia|familiare|quartiere|bambin|tradizion|verona|bologna/.test(d)) archetype = 'pz-family';
+  else if (/panificio|forno|focaccia|pane|colazioni|pasticceria/.test(d)) archetype = h % 2 === 0 ? 'pz-family' : 'pz-minimal';
+  else archetype = (['pz-napoli', 'pz-family', 'pz-minimal'] as const)[h % 3] ?? 'pz-napoli';
+
+  const heroByArch: Record<FoodGenome['archetype'], readonly string[]> = {
+    'pz-napoli': ['pizza-poster: grande foto pizza sopra/fiancheggiata da headline editoriale gigante', 'oven-first: forno/fiamma subito visibile, headline corta e fisica'],
+    'pz-osteria': ['fullbleed-atmosphere: locale/forno/tavola scura, atmosfera serale', 'split-editorial: testo da osteria + immagine materica'],
+    'pz-pop': ['bold-photo: foto grande vivace, headline diretta, badge energici', 'menu-first: menu/specialita subito visibili'],
+    'pz-minimal': ['split-clean: immagine pulita + headline essenziale, molto spazio', 'ingredient-first: pochi ingredienti selezionati come prova'],
+    'pz-family': ['quartiere-first: nome, zona, tavoli, orari e prenotazione subito chiari', 'pizza-poster caldo e accogliente'],
+    'pz-night': ['fullbleed-atmosphere: cena, brace, vini, tavoli e luce bassa', 'reservation-first: prenota e orari sopra la piega'],
+  };
+  const heroOptions = heroByArch[archetype];
+  const heroPattern = heroOptions[h % heroOptions.length] ?? heroOptions[0] ?? 'pizza-poster';
+  const menuPattern = /taglio|asporto|delivery/.test(d) ? 'compact-price-list' : archetype === 'pz-pop' ? 'poster-specials' : archetype === 'pz-minimal' ? 'short-signature-list' : 'editorial-menu';
+  const sectionOrder = archetype === 'pz-pop'
+    ? 'Hero -> Menu/Specialita -> Orari/Maps -> Gallery -> Prenota'
+    : archetype === 'pz-night' || archetype === 'pz-osteria'
+      ? 'Hero atmosfera -> Prenota/Orari -> Menu -> Vini/Sala -> Maps'
+      : archetype === 'pz-minimal'
+        ? 'Hero -> Ingredienti/Impasto -> Menu breve -> Prenota -> Contatti'
+        : 'Hero -> Orari/Maps -> Menu -> Forno/Impasto -> Storia -> Prenota';
+  const imageStrategy = archetype === 'pz-night' || archetype === 'pz-osteria'
+    ? 'forno, sala, tavoli, luce calda, mani al lavoro; evita foto generiche da stock luminose'
+    : archetype === 'pz-minimal'
+      ? 'ingredienti, pizza close-up pulita, dettagli materici; poche immagini forti'
+      : 'pizza, forno a legna, impasto, tavola; hero mai pasta/uova/cocktail se la descrizione parla di pizzeria';
+  const density = archetype === 'pz-pop' ? 'compact-conversion' : archetype === 'pz-minimal' ? 'airy-minimal' : 'editorial-readable';
+  return { archetype, heroPattern, menuPattern, sectionOrder, imageStrategy, density };
+}
+
+function foodGenomeNotes(description: string, id: string): string[] {
+  const g = foodDesignGenome(description, id);
+  return [
+    'GENOMA VISIVO FOOD - OBBLIGATORIO: questo sito NON deve sembrare una copia degli altri siti warm-bistro.',
+    `- Archetype/body class: apri il documento con <body class="${g.archetype}"> e mantieni la stessa classe su tutte le pagine.`,
+    `- Hero pattern: ${g.heroPattern}.`,
+    `- Menu pattern: ${g.menuPattern}.`,
+    `- Ordine sezioni consigliato: ${g.sectionOrder}.`,
+    `- Strategia immagini: ${g.imageStrategy}.`,
+    `- Densita: ${g.density}.`,
+    '- Regola anti-clone: varia composizione, ordine e ritmo; non usare sempre hero + menu + forno nello stesso identico modo.',
+    '- Regola conversione mobile: orari, luogo, telefono/prenotazione o CTA devono apparire molto presto, non dopo troppo scroll.',
+  ];
+}
 
 // Osservabilità diagnostica: spenta di default, attiva SOLO con BRIK_DIAG=true|1.
 // Racchiude esclusivamente delle console.log; non tocca alcun percorso decisionale.
@@ -48,7 +121,7 @@ export type QaForSite = (pages: readonly SitePage[], spec: ProjectSpec) => Promi
 const notFound = (id: string) => appError('PROJECT_NOT_FOUND', 'Progetto non trovato: ' + id, { retryable: false });
 
 function pushHistory(history: readonly SiteHistoryEntry[], s: SiteState, note: string): SiteHistoryEntry[] {
-  const e: SiteHistoryEntry = { version: s.version, criteria: s.spec.criteria, statements: s.statements, routes: s.routes, pages: s.pages, note, at: now() };
+  const e: SiteHistoryEntry = { version: s.version, criteria: s.spec.criteria, statements: s.statements, routes: s.routes, pages: s.pages, ...(s.themeOverrides ? { themeOverrides: s.themeOverrides } : {}), note, at: now() };
   return [...history, e].slice(-HISTORY_MAX);
 }
 
@@ -90,6 +163,8 @@ export async function createHome(args: {
   readonly reviewMinScore?: number;
   /** Materiale reale (allegati / sito importato) per la prima bozza. */
   readonly content?: string;
+  /** Note creative verticali aggiuntive, validate dal chiamante. */
+  readonly extraCreativeNotes?: readonly string[];
   /** Stile scelto dall'utente: se valido, sovrascrive la scelta automatica del modello. */
   readonly theme?: string;
   /** modern-saas: 'generated' | 'user' | 'none' — come mostrare il prodotto. */
@@ -146,10 +221,19 @@ export async function createHome(args: {
       directives: cd.directives.length,
     }));
     creativeNotes = creativeNotesFor(cd);
+        if (args.extraCreativeNotes && args.extraCreativeNotes.length) creativeNotes = [...creativeNotes, ...args.extraCreativeNotes];
     const pref = preferredTheme(args.theme, cd, isTheme);
     if (pref.source === 'creative_direction' && pref.theme) {
       effectiveTheme = pref.theme;
       console.log('    \u{1F3AC} tema da creative_direction: ' + effectiveTheme + ' (utente non ha scelto)');
+    }
+    const hasVerticalPizzeriaGenome = !!args.extraCreativeNotes?.some((n: string) => n.startsWith('PIZZERIA_PRESET:'));
+    if (!hasVerticalPizzeriaGenome && ((effectiveTheme ?? args.theme) === 'warm-bistro' || cd.recommendedTheme === 'warm-bistro')) {
+      const genomeNotes = foodGenomeNotes(args.description, args.id);
+      creativeNotes = [...creativeNotes, ...genomeNotes];
+      console.log('    \u{1F9EC} food_design_genome: ' + genomeNotes.slice(1, 6).join(' · '));
+    } else if (hasVerticalPizzeriaGenome) {
+      console.log('    \u{1F9EC} pizzeria_vertical_genome: canonical preset active; legacy food genome skipped');
     }
     savedCreative = { direction: cd, notes: creativeNotes, theme: effectiveTheme ?? null };
   } catch (e) { /* il livello decisionale non deve mai disturbare la creazione */ }
@@ -793,6 +877,200 @@ export async function approveProject(store: SiteStore, id: string): Promise<Resu
   return ok(state);
 }
 
+
+const THEME_OVERRIDE_RE = /<style data-brik-theme-overrides>[\s\S]*?<\/style>\s*/i;
+const LEGACY_ACCENT_RE = /<style data-brik-accent>[\s\S]*?<\/style>\s*/i;
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+const SAFE_CSS_VALUE_RE = /^(#[0-9a-fA-F]{6}|rgba?\([0-9.,%\s]+\)|[0-9.]+(px|rem|em|%)?)$/;
+
+const TOKEN_TO_CSS_VAR: Record<keyof ThemeOverrides, string> = {
+  bg: '--bg',
+  paper: '--paper',
+  surface: '--surface',
+  surface2: '--surface-2',
+  ink: '--ink',
+  ink2: '--ink-2',
+  ink3: '--ink-3',
+  muted: '--muted',
+  line: '--line',
+  accent: '--accent',
+  accent2: '--accent-2',
+  accent3: '--accent-3',
+  accentInk: '--accent-ink',
+  radius: '--radius',
+  radiusLg: '--radius-lg',
+};
+
+function cleanThemeOverrides(o: ThemeOverrides | undefined): ThemeOverrides {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(o ?? {})) {
+    if (typeof v === 'string' && SAFE_CSS_VALUE_RE.test(v.trim())) out[k] = v.trim();
+  }
+  return out as ThemeOverrides;
+}
+
+function themeOverrideCss(overrides: ThemeOverrides): string {
+  const clean = cleanThemeOverrides(overrides);
+  const vars = (Object.keys(TOKEN_TO_CSS_VAR) as (keyof ThemeOverrides)[])
+    .filter((k) => clean[k])
+    .map((k) => `${TOKEN_TO_CSS_VAR[k]}:${clean[k]}`)
+    .join(';');
+  if (!vars) return '';
+
+  // V2 senior review:
+  // Non basta cambiare :root. I template premium usano gradient, card, pill, CTA e
+  // superfici con regole specifiche. Gli override devono essere abbastanza forti da
+  // rendere visibile la modifica, ma restare token-based e non distruggere il layout.
+  const hasDarkBg = !!clean.bg && /^#0|^#1|^#2/i.test(clean.bg);
+  const hasLightBg = !!clean.bg && !hasDarkBg;
+  const page = clean.bg || clean.ink
+    ? `html,body{background:var(--bg)!important;color:var(--ink)!important;color-scheme:${hasDarkBg ? 'dark' : 'light'}}body{background:var(--bg)!important}`
+    : '';
+  const typography = clean.ink
+    ? `h1,h2,h3,h4,h5,h6,.h1,.h2,.title,.headline{color:var(--ink)!important}.lead,.sub,p,li,.copy,.text,.description{color:var(--ink-2,var(--ink))!important}.eyebrow,.kicker,.section-kicker,.meta{color:var(--accent)!important}`
+    : '';
+  const surfaces = clean.bg
+    ? `.section,.block,.hero,.main,main{background:transparent!important}.card,.tile,.panel,.menu-card,.menu-board,.menu-list,.info-card,.contact-card,.price-card,.service,.ui,.box,.surface{background:var(--surface,var(--paper))!important;color:var(--ink)!important;border-color:var(--line)!important}.paper,.sheet,.story-card{background:var(--paper,var(--surface))!important;color:var(--ink)!important}`
+    : '';
+  const nav = clean.bg
+    ? `.nav,header,.site-header{background:color-mix(in srgb,var(--bg) 88%,transparent)!important;border-color:var(--line)!important;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}`
+    : '';
+  const buttons = clean.accent || clean.bg || clean.ink
+    ? `.btn.primary,.btn--solid,.btn.accent,.button.primary,[data-primary],a.primary,button.primary{background:var(--accent)!important;border-color:var(--accent)!important;color:var(--accent-ink)!important}.btn.secondary,.button.secondary,.hero-badges span,.quick-info span,.pill,.badge,.tag{background:color-mix(in srgb,var(--surface,var(--paper)) 88%,transparent)!important;border-color:var(--line)!important;color:var(--ink-2,var(--ink))!important}.hero-badges span:first-child,.quick-info span:first-child,.pill.is-active,.badge.is-active{background:color-mix(in srgb,var(--accent) 18%,var(--surface,var(--paper)))!important;border-color:color-mix(in srgb,var(--accent) 46%,transparent)!important;color:var(--accent)!important}.link,.link .u,a{color:var(--ink)!important}.link .arr{color:var(--accent)!important}`
+    : '';
+  const media = clean.bg
+    ? `.hero-media,.media,.image-card,.shot,figure{background:var(--surface,var(--paper))!important;border-color:var(--line)!important}.hero::after{color:color-mix(in srgb,var(--accent) 11%,transparent)!important}.menu-board::before,.menu-list::before{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 12%,transparent),transparent 42%)!important}`
+    : '';
+  const forms = clean.bg || clean.accent
+    ? `input,textarea,select{background:var(--surface,var(--paper))!important;color:var(--ink)!important;border-color:var(--line)!important}input::placeholder,textarea::placeholder{color:var(--muted,var(--ink-3))!important}`
+    : '';
+  const darkPolish = hasDarkBg
+    ? `.price,.menu-item .price{color:color-mix(in srgb,var(--accent) 70%,#ffffff)!important}.menu-item p,.service .sd{color:var(--ink-2)!important}.chip,.hero-badges span,.quick-info span,.pill{box-shadow:none!important}`
+    : '';
+  const lightPolish = hasLightBg
+    ? `.btn.secondary,.button.secondary,.hero-badges span,.quick-info span,.pill,.badge,.tag{box-shadow:0 10px 30px rgba(60,36,24,.06)!important}`
+    : '';
+
+  return `<style data-brik-theme-overrides>:root{${vars}}${page}${typography}${surfaces}${nav}${buttons}${media}${forms}${darkPolish}${lightPolish}</style>`;
+}
+function applyThemeOverridesToHtml(html: string, overrides: ThemeOverrides | undefined): string {
+  let out = html.replace(THEME_OVERRIDE_RE, '').replace(LEGACY_ACCENT_RE, '');
+  const css = themeOverrideCss(overrides ?? {});
+  if (!css) return out;
+  // Va SEMPRE dopo il design system, quindi vicino a </head> batte i token del tema.
+  if (/<\/head>/i.test(out)) return out.replace(/<\/head>/i, css + '</head>');
+  return css + out;
+}
+
+function colorFromInstruction(instruction: string): string | null {
+  const hex = instruction.match(/#[0-9a-fA-F]{6}\b/);
+  if (hex) return hex[0];
+  const s = instruction.toLowerCase();
+  if (/\b(rosso|red|pomodoro)\b/.test(s)) return '#B83E26';
+  if (/\b(arancione|orange|terracotta)\b/.test(s)) return '#C9633A';
+  if (/\b(verde|green|oliva|olive)\b/.test(s)) return '#43633F';
+  if (/\b(giallo|yellow|oro|gold)\b/.test(s)) return '#D99A2B';
+  if (/\b(blu|blue)\b/.test(s)) return '#2F5E8C';
+  if (/\b(viola|purple)\b/.test(s)) return '#6F4C8B';
+  if (/\b(nero|black)\b/.test(s)) return '#0A0806';
+  if (/\b(bianco|white)\b/.test(s)) return '#FFFFFF';
+  return null;
+}
+
+function plannedThemeOverrideEdit(instruction: string, current: ThemeOverrides | undefined): { overrides: ThemeOverrides; changes: string[] } | null {
+  const s = instruction.toLowerCase();
+  const cur = cleanThemeOverrides(current);
+  const asksBg = /\b(sfondo|background|fondo|tema|modalit[aà])\b/.test(s);
+  const asksAccent = /\b(colore principale|accent|accento|cta|bottoni|pulsanti|bottone|button|primario|principale)\b/.test(s);
+  const asksText = /\b(testo|testi|scritta|scritte|font color|colore del testo)\b/.test(s);
+  const asksRadius = /\b(angoli|bordi|bordo|radius|arrotondat|squadrato|squadrati)\b/.test(s);
+  const asksReset = /\b(ripristina|reset|annulla|torna originale|default)\b/.test(s) && /\b(colori|tema|stile|sfondo)\b/.test(s);
+  const wantsDark = /\b(nero|nera|black|scuro|scura|dark|notte|carbonio)\b/.test(s) || /pi[uù]\s+scur/.test(s);
+  const wantsLight = /\b(chiaro|chiara|light|bianco|bianca|white|panna|crema|cream)\b/.test(s) || /pi[uù]\s+chiar/.test(s);
+
+  if (asksReset) {
+    return { overrides: {}, changes: ['colori del tema ripristinati'] };
+  }
+
+  if ((asksBg && wantsDark) || (!asksBg && /rendilo\s+pi[uù]\s+scur|versione\s+scura|modalit[aà]\s+scura|tema\s+scuro/.test(s))) {
+    return {
+      overrides: {
+        ...cur,
+        bg: '#050403',
+        paper: '#0C0806',
+        surface: '#120D09',
+        surface2: '#1D130E',
+        ink: '#FFF7EA',
+        ink2: '#D6C6B3',
+        ink3: '#9E8A78',
+        muted: '#A89482',
+        line: 'rgba(255,247,234,.16)',
+        accent: cur.accent ?? '#E06D45',
+        accent2: cur.accent2 ?? '#F1A06F',
+        accent3: cur.accent3 ?? '#6F7F48',
+        accentInk: '#0C0806',
+      },
+      changes: ['sfondo scuro applicato ai token del tema'],
+    };
+  }
+
+  if ((asksBg && wantsLight) || (!asksBg && /rendilo\s+pi[uù]\s+chiar|versione\s+chiara|modalit[aà]\s+chiara|tema\s+chiaro/.test(s))) {
+    return {
+      overrides: {
+        ...cur,
+        bg: '#F8F0E4',
+        paper: '#FFFDF8',
+        surface: '#FFF8EE',
+        surface2: '#EFE0CC',
+        ink: '#20140F',
+        ink2: '#6F5547',
+        ink3: '#967C6D',
+        muted: '#967C6D',
+        line: 'rgba(69,38,25,.16)',
+        accent: cur.accent ?? '#B83E26',
+        accent2: cur.accent2 ?? '#43633F',
+        accent3: cur.accent3 ?? '#D99A2B',
+        accentInk: '#FFF8EE',
+      },
+      changes: ['sfondo chiaro applicato ai token del tema'],
+    };
+  }
+
+  if (asksAccent) {
+    const accent = colorFromInstruction(instruction);
+    if (accent && HEX_COLOR_RE.test(accent)) {
+      const accentInk = /#(ffffff|fff8ee|f8f0e4|d99a2b)/i.test(accent) ? '#20140F' : '#FFF8EE';
+      return {
+        overrides: { ...cur, accent, accentInk },
+        changes: ['colore principale applicato ai token del tema'],
+      };
+    }
+  }
+
+  if (asksText) {
+    const ink = colorFromInstruction(instruction);
+    if (ink && HEX_COLOR_RE.test(ink)) {
+      return {
+        overrides: { ...cur, ink, ink2: ink, ink3: cur.ink3 ?? ink },
+        changes: ['colore testo applicato ai token del tema'],
+      };
+    }
+  }
+
+  if (asksRadius) {
+    const square = /\b(squadrato|squadrati|meno arrotondat|piatti|netti)\b/.test(s);
+    const round = /\b(pi[uù] arrotondat|molto arrotondat|tondi|morbidi)\b/.test(s);
+    if (square || round) {
+      return {
+        overrides: { ...cur, radius: square ? '8px' : '28px', radiusLg: square ? '16px' : '44px' },
+        changes: [square ? 'bordi resi più squadrati' : 'bordi resi più arrotondati'],
+      };
+    }
+  }
+
+  return null;
+}
+
 export async function editProject(args: {
   readonly store: SiteStore;
   readonly id: string;
@@ -817,6 +1095,26 @@ export async function editProject(args: {
     return err(appError('EDIT_CAP_REACHED', `Hai usato tutte le ${editCap} modifiche della prova. Riattiva il sito per continuare a modificarlo.`, { retryable: false }));
   }
 
+  // Modifiche visuali supportate: non passano dall'LLM, modificano token persistenti del tema.
+  const tokenEdit = plannedThemeOverrideEdit(args.instruction, cur.themeOverrides);
+  if (tokenEdit) {
+    const history = pushHistory(f.value.history, cur, 'modifica token tema: ' + args.instruction);
+    const pages = cur.pages.map((p) => ({ route: p.route, html: applyThemeOverridesToHtml(p.html, tokenEdit.overrides) }));
+    const state: SiteState = {
+      ...cur,
+      pages,
+      themeOverrides: tokenEdit.overrides,
+      status: 'preview',
+      version: cur.version + 1,
+      updatedAt: now(),
+      editCount: (cur.editCount ?? 0) + 1,
+    };
+    const saved = await args.store.save({ ...f.value, state, history });
+    if (!saved.ok) return err(saved.error);
+    console.log('  → edit_theme_overrides_applied:', tokenEdit.changes.join(', '));
+    return ok({ accepted: true, state, conflicts: [], changes: tokenEdit.changes });
+  }
+
   // Il materiale della create non si trascina nelle modifiche (i dati reali sono già nelle pagine);
   // qui conta solo l'eventuale allegato di QUESTA modifica.
   const { content: _prevContent, ...specBase } = cur.spec;
@@ -827,15 +1125,12 @@ export async function editProject(args: {
   // non usa i criteri, li usa solo la QA. Eseguirli in parallelo nasconde il tempo di
   // planEdit sotto quello, piu lungo, della rigenerazione. Il generatore riceve i
   // criteri attuali (che ignora); la QA userà quelli nuovi.
-  const genSpec: ProjectSpec = { ...specBase, ...contentPatch };
-  const [plan, edited] = await Promise.all([
-    planEdit({ instruction: args.instruction, spec: cur.spec, routes: cur.routes, llm: args.llm }),
-    args.generator.edit(genSpec, cur.routes, cur.pages, args.instruction),
-  ]);
-  if (!plan.ok) return err(plan.error);
-  if (!edited.ok) return err(edited.error);
+    const plan = await planEdit({ instruction: args.instruction, spec: cur.spec, routes: cur.routes, llm: args.llm });
+    if (!plan.ok) return err(plan.error);
 
-  const newSpec: ProjectSpec = { ...specBase, criteria: [...plan.value.criteria], ...contentPatch };
+    const newSpec: ProjectSpec = { ...specBase, criteria: [...plan.value.criteria], ...contentPatch };
+    const edited = await args.generator.edit(newSpec, cur.routes, cur.pages, args.instruction);
+    if (!edited.ok) return err(edited.error);
 
   // 3) QA MIRATA. Le pagine non toccate dal generatore sono byte-identiche a prima,
   // quindi ri-verificarle e ridondante. Verifichiamo l'unione di:
@@ -884,7 +1179,7 @@ export async function editProject(args: {
     ...cur,
     spec: newSpec,
     statements: newSpec.criteria.map((c) => c.statement),
-    pages: edited.value,
+    pages: (cur.themeOverrides ? edited.value.map((p) => ({ route: p.route, html: applyThemeOverridesToHtml(p.html, cur.themeOverrides) })) : edited.value),
     status: 'preview',
     version: cur.version + 1,
     updatedAt: now(),
@@ -947,7 +1242,8 @@ export async function revertProject(store: SiteStore, id: string): Promise<Resul
     spec: { ...cur.spec, criteria: [...last.criteria] },
     statements: last.statements,
     routes: last.routes,
-    pages: last.pages,
+    pages: last.themeOverrides ? last.pages.map((p) => ({ route: p.route, html: applyThemeOverridesToHtml(p.html, last.themeOverrides) })) : last.pages,
+    ...(last.themeOverrides ? { themeOverrides: last.themeOverrides } : {}),
     status: 'preview',
     version: cur.version + 1,
     updatedAt: now(),

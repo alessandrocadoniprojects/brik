@@ -1,22 +1,57 @@
+# Ignore everything at repository root
+/*
+
+# Allow repository files
+!/.gitignore
+!/.env.example
+!/README.md
+!/package.json
+!/package-lock.json
+!/tsconfig.json
+
+# Allow application directories
+!/src/
+!/web/
+!/test/
+!/demo/
+
+# Dependencies and build output
 node_modules/
 dist/
-.env
-.env.local
+coverage/
 *.log
 .DS_Store
-demo/tests/
+.localized
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+
+# Runtime and temporary output
+data/
+.wrangler/
 playwright-report/
 test-results/
-demo/eval-output/
-demo/generated.html
-
-demo/preview-output/
-demo/edit-output/
+__pycache__/
+*.tmp
+*.bak
+*.bak-*
 *.zip
 
+# Demo output
+demo/tests/
+demo/eval-output/
+demo/preview-output/
+demo/edit-output/
 demo/projects/
 demo/site-output/
 demo/plan-output/
 demo/sites/
-
-data/
+demo/generated.html
+demo/update-output/

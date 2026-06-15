@@ -9,10 +9,21 @@
  * NB: testo base ragionevole, non consulenza legale; il titolare può adattarlo.
  */
 
+import { buildPrivacyPolicy, buildCookiePolicy, type LegalProfile, type LegalPurposes, type LegalCollectedData, type LegalThirdPartyServices, type CookieMode } from './legalProfile.js';
+
 export interface LegalData {
   legalName?: string;
   vat?: string;
   address?: string;
+  // Estensione Patch 8 — campi opzionali, retrocompatibili. Se assenti, le pagine
+  // mantengono il testo base attuale; se presenti, vengono usati gli helper arricchiti.
+  ownerName?: string;
+  privacyEmail?: string;
+  phone?: string;
+  purposes?: LegalPurposes;
+  collectedData?: LegalCollectedData;
+  thirdPartyServices?: LegalThirdPartyServices;
+  cookieMode?: CookieMode;
 }
 
 export interface LegalOpts {
@@ -23,6 +34,40 @@ export interface LegalOpts {
 
 function esc(s: string): string {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** Mappa LegalData (fonte persistita) → LegalProfile (view-model per gli helper). Nessun fallback: i campi assenti restano assenti, così la validazione resta veritiera. */
+export function legalDataToProfile(legal: LegalData): LegalProfile {
+  const out: LegalProfile = {};
+  if (legal.legalName) out.legalName = legal.legalName;
+  if (legal.ownerName) out.ownerName = legal.ownerName;
+  if (legal.vat) out.vatOrTaxId = legal.vat;
+  if (legal.address) out.registeredAddress = legal.address;
+  if (legal.privacyEmail) out.privacyEmail = legal.privacyEmail;
+  if (legal.phone) out.phone = legal.phone;
+  if (legal.purposes) out.purposes = legal.purposes;
+  if (legal.collectedData) out.collectedData = legal.collectedData;
+  if (legal.thirdPartyServices) out.thirdPartyServices = legal.thirdPartyServices;
+  if (legal.cookieMode) out.cookieMode = legal.cookieMode;
+  return out;
+}
+
+function anyFlag(obj: Record<string, unknown> | undefined): boolean {
+  if (!obj) return false;
+  return Object.values(obj).some((v) => v === true || (typeof v === 'string' && v.trim() !== ''));
+}
+
+/** True se l'utente ha compilato almeno un campo dell'estensione Patch 8. */
+export function hasExtendedLegal(l: LegalData): boolean {
+  return !!(
+    (l.cookieMode && l.cookieMode.length) ||
+    (l.privacyEmail && l.privacyEmail.trim()) ||
+    (l.ownerName && l.ownerName.trim()) ||
+    (l.phone && l.phone.trim()) ||
+    anyFlag(l.purposes as Record<string, unknown> | undefined) ||
+    anyFlag(l.collectedData as Record<string, unknown> | undefined) ||
+    anyFlag(l.thirdPartyServices as Record<string, unknown> | undefined)
+  );
 }
 
 function titolare(o: LegalOpts): string {
@@ -79,7 +124,17 @@ function page(title: string, bodyHtml: string): string {
   );
 }
 
+function legalDateLabel(): string {
+  try { return new Date().toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return ''; }
+}
+
 function privacyPage(o: LegalOpts): string {
+  if (hasExtendedLegal(o.legal)) {
+    const prof = legalDataToProfile(o.legal);
+    if (!prof.legalName && o.name) prof.legalName = o.name;
+    if (!prof.privacyEmail && o.email) prof.privacyEmail = o.email;
+    return page('Privacy Policy', buildPrivacyPolicy(prof, { dateLabel: legalDateLabel() }));
+  }
   const mail = o.email ? `<a href="mailto:${esc(o.email)}">${esc(o.email)}</a>` : 'il titolare';
   return page('Privacy Policy', [
     '<h1>Informativa sulla privacy</h1>',
@@ -101,6 +156,11 @@ function privacyPage(o: LegalOpts): string {
 }
 
 function cookiePage(o: LegalOpts): string {
+  if (hasExtendedLegal(o.legal)) {
+    const prof = legalDataToProfile(o.legal);
+    if (!prof.legalName && o.name) prof.legalName = o.name;
+    return page('Cookie Policy', buildCookiePolicy(prof, { dateLabel: legalDateLabel() }));
+  }
   return page('Cookie Policy', [
     '<h1>Cookie Policy</h1>',
     '<p>Questo sito utilizza esclusivamente <strong>cookie e tecnologie tecniche</strong> necessari al corretto funzionamento delle pagine. Non vengono utilizzati cookie di profilazione a fini pubblicitari.</p>',

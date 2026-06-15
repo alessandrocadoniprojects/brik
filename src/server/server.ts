@@ -63,11 +63,20 @@ import { extractAttachmentText } from './ingest.js';
 import { makeAssetStore } from '../project/assets.js';
 import { htmlToText, extractImageUrls } from './htmlImport.js';
 import { renderPageContent, closeRenderBrowser } from './renderPage.js';
-import { withLegal, type LegalData } from './legal.js';
+import { withLegal, legalDataToProfile, type LegalData } from './legal.js';
+import { validateLegalProfile, type LegalPurposes, type LegalCollectedData, type LegalThirdPartyServices, type CookieMode } from './legalProfile.js';
 import { injectVideoFacade, withVideoFacade } from './videoFacade.js';
 import { withContactLinks, linkifyContacts } from './contacts.js';
 import { injectBlockAssets, withBlockAssets } from './blocks.js';
 import { withSiteHead } from './siteHead.js';
+import { publicBusinessName, withPublicSanitize } from './publicSanitizer.js';
+import { extractPizzeriaBusinessProfile, type BusinessProfile } from './pizzeriaProfile.js';
+import { withPizzeriaProfile } from './pizzeriaApply.js';
+import { buildPizzeriaLocalSeo, withPizzeriaSeo } from './pizzeriaLocalSeo.js';
+import { applyPizzeriaProfileEdit } from './pizzeriaProfileEdits.js';
+import { normalizeStartingPoint, mergeStartingPointIntoProfile, type StartingPointIntake } from './startingPoint.js';
+import { planPizzeriaIntake, applyPizzeriaIntakeAnswers, ensurePizzeriaProfile, type PizzeriaIntakeAnswers } from './pizzeriaVerticalIntake.js';
+import { pizzeriaCreativeNotes, pizzeriaRecommendedTheme } from './pizzeriaGenome.js';
 import { getCategory, renderCategoryPage, sitemapXml } from './seoCategories.js';
 import { makeAuthStore, parseCookies, buildSessionCookie, clearSessionCookie, buildGuestCookie, clearGuestCookie, GUEST_COOKIE, parseOperatorEmails, isOperator, SESSION_COOKIE, type SessionUser } from './auth.js';
 
@@ -116,7 +125,7 @@ function sessionUserOf(req: IncomingMessage): SessionUser | null {
 }
 
 /** Dati per-sito su disco (owners/{id}.json): email recapito form, guest, dati legali. */
-interface OwnerFile { email?: string; guestId?: string; legal?: LegalData }
+interface OwnerFile { email?: string; guestId?: string; legal?: LegalData; businessProfile?: BusinessProfile; startingPoint?: StartingPointIntake }
 function readOwnerFile(id: string): OwnerFile {
   try { return JSON.parse(readFileSync(join(ownersDir, id + '.json'), 'utf8')) as OwnerFile; } catch { return {}; }
 }
@@ -128,6 +137,10 @@ function writeOwnerEmail(id: string, email: string): void { writeOwnerFile(id, {
 function readOwnerEmail(id: string): string | null { const e = readOwnerFile(id).email; return typeof e === 'string' ? e : null; }
 function readLegal(id: string): LegalData { return readOwnerFile(id).legal || {}; }
 function writeLegal(id: string, legal: LegalData): void { writeOwnerFile(id, { legal }); }
+function readBusinessProfile(id: string): BusinessProfile | undefined { return readOwnerFile(id).businessProfile; }
+function writeBusinessProfile(id: string, businessProfile: BusinessProfile): void { writeOwnerFile(id, { businessProfile }); }
+function readStartingPoint(id: string): StartingPointIntake | undefined { return readOwnerFile(id).startingPoint; }
+function writeStartingPoint(id: string, startingPoint: StartingPointIntake): void { writeOwnerFile(id, { startingPoint }); }
 // --- proprietà "ospite" (flusso prova senza login): owners/{id}.json = { guestId } ---
 function guestIdOf(req: IncomingMessage): string | null {
   const id = parseCookies(req.headers.cookie)[GUEST_COOKIE];
@@ -638,6 +651,11 @@ const STATIC: Record<string, { file: string; type: string }> = {
   '/how-it-works': { file: 'how-it-works.html', type: 'text/html; charset=utf-8' },
   '/pricing': { file: 'pricing.html', type: 'text/html; charset=utf-8' },
   '/templates': { file: 'templates.html', type: 'text/html; charset=utf-8' },
+  '/pizzerie': { file: 'pizzerie.html', type: 'text/html; charset=utf-8' },
+  '/pizzerie.html': { file: 'pizzerie.html', type: 'text/html; charset=utf-8' },
+  '/pizzerie.css': { file: 'pizzerie.css', type: 'text/css; charset=utf-8' },
+  '/pizzerie.js': { file: 'pizzerie.js', type: 'text/javascript; charset=utf-8' },
+  '/pizzerie-styles.webp': { file: 'pizzerie-styles.webp', type: 'image/webp' },
 };
 
 async function serveStatic(res: ServerResponse, pathname: string): Promise<boolean> {
@@ -1188,16 +1206,25 @@ const server = createServer(async (req, res) => {
       const token = url.searchParams.get('token') || '';
       const email = authStore.consumeLoginToken(token);
       if (!email) { res.writeHead(302, { Location: '/?login=expired' }); res.end(); return; }
-      // aggancia all'account i progetti creati da ospite (solo se ancora di un ospite)
+      // Aggancia all'account i progetti creati da ospite e conserva
+      // l'ultimo progetto per riaprirlo dopo il magic link.
+      let claimedProjectIds: string[] = [];
       if (ANON_TRIAL) {
-        for (const pid of authStore.takePendingClaim(token)) {
+        claimedProjectIds = authStore.takePendingClaim(token);
+        for (const pid of claimedProjectIds) {
           if (readOwnerGuest(pid)) writeOwnerEmail(pid, email);
         }
       }
       const sid = authStore.createSession(email, SESSION_TTL_MS);
       metricInc('login');
       const cookies = [buildSessionCookie(sid, { secure: COOKIE_SECURE, maxAgeSec: SESSION_MAXAGE_SEC }), clearGuestCookie()];
-      res.writeHead(302, { Location: '/', 'Set-Cookie': cookies });
+      const claimedProjectId = claimedProjectIds.length
+        ? claimedProjectIds[claimedProjectIds.length - 1]
+        : '';
+      const redirectLocation = claimedProjectId
+        ? '/?site=' + encodeURIComponent(claimedProjectId)
+        : '/';
+      res.writeHead(302, { Location: redirectLocation, 'Set-Cookie': cookies });
       res.end();
       return;
     }
@@ -1218,6 +1245,16 @@ const server = createServer(async (req, res) => {
       const r = await planIntakeQuestions({ description, llm });
       const v = r.ok ? r.value : { questions: [], recommendedStyle: null };
       return sendJson(res, 200, { ok: true, questions: v.questions, recommendedStyle: v.recommendedStyle });
+    }
+
+    // Pizzeria Pack 5: piano domande verticali pizzeria (deterministico, adattivo, pre-create).
+    if (path === '/api/pizzeria-intake' && method === 'POST') {
+      const body = await readJsonBody(req);
+      const description = typeof body.description === 'string' ? body.description.trim() : '';
+      const startingPoint = normalizeStartingPoint((body as Record<string, unknown>).startingPoint) || undefined;
+      const profile = description ? ensurePizzeriaProfile(description) : undefined;
+      const plan = planPizzeriaIntake({ description, ...(profile ? { profile } : {}), ...(startingPoint ? { startingPoint } : {}) });
+      return sendJson(res, 200, { ok: true, active: plan.active, questions: plan.questions });
     }
 
     // Allegato -> testo. Riceve { name, mime, dataBase64 } e restituisce il testo estratto.
@@ -1385,7 +1422,42 @@ const server = createServer(async (req, res) => {
       if (creator) writeOwnerEmail(id, creator.email);
       else if (guestId) writeOwnerGuest(id, guestId);
       writeGenJob(id, { status: 'generating', startedAt: Date.now() });
-      const createOpts = { store, id, ownerId: 'web', description: fullDescription, llm, classifier, generator: buildGenerator, runQa, maxRepairs: 1, review: DIRECTOR_REVIEW, reviewMinScore: DIRECTOR_MIN_SCORE, ...(content ? { content } : {}), ...(typeof body.theme === 'string' && isTheme(body.theme) ? { theme: body.theme } : {}), ...(typeof body.saasVisual === 'string' ? { saasVisual: body.saasVisual } : {}), ...(body.variant === 'dark' || body.variant === 'light' ? { variant: body.variant } : {}) };
+      // Pizzeria Pack: se la descrizione è chiaramente una pizzeria, estrai e salva il profilo dati
+      // (opzionale, best-effort: non blocca la creazione e non tocca la generazione).
+      try { const _pp = extractPizzeriaBusinessProfile(fullDescription); if (_pp) writeBusinessProfile(id, { kind: 'pizzeria', data: _pp }); } catch (e) { /* profilo best-effort */ }
+      // Pizzeria Pack 4: salva lo Starting Point Intake (opzionale, backward-compatible) e, se arriva
+      // un Google Maps certo su una pizzeria, valorizza il profilo. Best-effort: non blocca la creazione.
+      try {
+        const _sp = normalizeStartingPoint((body as Record<string, unknown>).startingPoint);
+        if (_sp) {
+          writeStartingPoint(id, _sp);
+          const _bpNow = readBusinessProfile(id);
+          if (_bpNow && _bpNow.kind === 'pizzeria') {
+            const _m = mergeStartingPointIntoProfile(_sp, _bpNow.data);
+            if (_m.changed && _m.profile) writeBusinessProfile(id, { kind: 'pizzeria', data: _m.profile });
+          }
+        }
+      } catch (e) { /* starting point best-effort */ }
+      // Pizzeria Pack 5: applica le risposte dell'intake verticale al profilo (best-effort).
+      try {
+        const _pa = (body as Record<string, unknown>).pizzeriaAnswers;
+        if (_pa && typeof _pa === 'object') {
+          const _bp2 = readBusinessProfile(id);
+          const _base = _bp2 && _bp2.kind === 'pizzeria' ? _bp2.data : ensurePizzeriaProfile(fullDescription);
+          if (_base) {
+            const _r = applyPizzeriaIntakeAnswers(_base, _pa as PizzeriaIntakeAnswers);
+            if (_r.changed || !_bp2) writeBusinessProfile(id, { kind: 'pizzeria', data: _r.profile });
+          }
+        }
+      } catch (e) { /* intake verticale best-effort */ }
+      // Pizzeria Pack 6B: note del genome dal profilo persistito (vuoto se non pizzeria), unite alle creativeNotes.
+      const _bp = readBusinessProfile(id);
+      const _genomeNotes = pizzeriaCreativeNotes(_bp);
+      // Theme: la scelta esplicita dell'utente prevale SEMPRE; in sua assenza, fallback dal pizzeriaType (genome).
+      const _userTheme = (typeof body.theme === 'string' && isTheme(body.theme)) ? body.theme : undefined;
+      const _genomeTheme = pizzeriaRecommendedTheme(_bp);
+      const _effTheme = _userTheme || _genomeTheme;
+      const createOpts = { store, id, ownerId: 'web', description: fullDescription, llm, classifier, generator: buildGenerator, runQa, maxRepairs: 1, review: DIRECTOR_REVIEW, reviewMinScore: DIRECTOR_MIN_SCORE, ...(content ? { content } : {}), ...(_effTheme ? { theme: _effTheme } : {}), ...(typeof body.saasVisual === 'string' ? { saasVisual: body.saasVisual } : {}), ...(body.variant === 'dark' || body.variant === 'light' ? { variant: body.variant } : {}), ...(_genomeNotes.length ? { extraCreativeNotes: _genomeNotes } : {}) };
       const jobGuestId = guestId;
       // La build gira in background: nessuna connessione HTTP tenuta aperta 3-4 min (era la causa dei "siti persi").
       void (async () => {
@@ -1438,7 +1510,7 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 202, { ok: true, id, gen: 'generating' });
     }
 
-    const apiMatch = path.match(/^\/api\/projects\/([^/]+)(?:\/(edit|edit-clarify|approve|publish|revert|page|theme|email|delete|concierge|unlock|lock|checkout))?$/);
+    const apiMatch = path.match(/^\/api\/projects\/([^/]+)(?:\/(edit|edit-clarify|approve|publish|publish-status|revert|page|theme|email|delete|concierge|unlock|lock|checkout))?$/);
     if (apiMatch) {
       const id = decodeURIComponent(apiMatch[1] as string);
       const action = apiMatch[2];
@@ -1598,9 +1670,28 @@ const server = createServer(async (req, res) => {
       if (action === 'legal' && method === 'POST') {
         const body = await readJsonBody(req);
         const s = (x: unknown) => (typeof x === 'string' ? x.trim().slice(0, 200) : '');
-        const legal: LegalData = { legalName: s(body.legalName), vat: s(body.vat), address: s(body.address) };
+        const b = (x: unknown) => x === true || x === 'true' || x === 1 || x === '1';
+        const obj = (x: unknown): Record<string, unknown> => (x && typeof x === 'object' ? (x as Record<string, unknown>) : {});
+        const CM = ['technical-only', 'basic-analytics', 'full-analytics', 'marketing-pixel', 'unknown'];
+        const cm = typeof body.cookieMode === 'string' && CM.includes(body.cookieMode) ? (body.cookieMode as CookieMode) : undefined;
+        const po = obj(body.purposes), cd = obj(body.collectedData), tp = obj(body.thirdPartyServices);
+        const purposes: LegalPurposes = {};
+        (['businessInfo', 'contactRequests', 'reservations', 'whatsapp', 'newsletter', 'analytics', 'marketing'] as const).forEach((k) => { if (b(po[k])) purposes[k] = true; });
+        const collectedData: LegalCollectedData = {};
+        (['name', 'email', 'phone', 'message', 'reservationPreference'] as const).forEach((k) => { if (b(cd[k])) collectedData[k] = true; });
+        const other = s(cd.other); if (other) collectedData.other = other;
+        const thirdPartyServices: LegalThirdPartyServices = {};
+        (['cloudflareHosting', 'emailProvider', 'googleMaps', 'youtubeVimeo', 'metaPixel', 'googleAds', 'whatsapp', 'instagramFacebookLinks', 'analytics'] as const).forEach((k) => { if (b(tp[k])) thirdPartyServices[k] = true; });
+        const legal: LegalData = {
+          legalName: s(body.legalName), vat: s(body.vat), address: s(body.address),
+          ownerName: s(body.ownerName), privacyEmail: s(body.privacyEmail), phone: s(body.phone),
+          ...(Object.keys(purposes).length ? { purposes } : {}),
+          ...(Object.keys(collectedData).length ? { collectedData } : {}),
+          ...(Object.keys(thirdPartyServices).length ? { thirdPartyServices } : {}),
+          ...(cm ? { cookieMode: cm } : {}),
+        };
         writeLegal(id, legal);
-        return sendJson(res, 200, { ok: true, legal });
+        return sendJson(res, 200, { ok: true, legal, warnings: validateLegalProfile(legalDataToProfile(legal)) });
       }
 
       // Attiva/disattiva "gratis" (entitled) — riservato agli operatori (pannello Attività).
@@ -1630,6 +1721,19 @@ const server = createServer(async (req, res) => {
         const body = await readJsonBody(req, 24_000_000); // può includere foto (base64) ridimensionate dal browser
         const instruction = typeof body.instruction === 'string' ? body.instruction.trim() : '';
         if (!instruction) return sendJson(res, 400, { ok: false, error: { code: 'NO_INSTRUCTION', message: 'Istruzione mancante.' } });
+        // Pizzeria Pack 3B: edit deterministico di menu/orari dal profilo (nessun LLM se gestito).
+        {
+          const _bpEdit = readBusinessProfile(id);
+          if (_bpEdit && _bpEdit.kind === 'pizzeria') {
+            const _pe = applyPizzeriaProfileEdit(_bpEdit.data, instruction);
+            if (_pe.handled) {
+              if (_pe.profile) writeBusinessProfile(id, { kind: 'pizzeria', data: _pe.profile });
+              const _pj = await getProject(store, id);
+              const _summary = _pj.ok && _pj.value ? withSummary(_pj.value) : {};
+              return sendJson(res, 200, { ok: true, accepted: !!_pe.profile, conflicts: [], changes: _pe.message ? [_pe.message] : [], message: _pe.message || '', ..._summary });
+            }
+          }
+        }
         const rawSources = Array.isArray(body.sources) ? body.sources : [];
         const sources = rawSources
           .map((s) => (s && typeof s === 'object' ? { name: String((s as Record<string, unknown>).name ?? '').trim(), text: String((s as Record<string, unknown>).text ?? '').trim() } : null))
@@ -1723,6 +1827,21 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 200, { ok: true, theme: themeOfPages(pages), ...withSummary(state) });
       }
 
+      if (action === 'publish-status' && method === 'GET') {
+        // Check di raggiungibilita del sito pubblicato, fatto dal SERVER perche il browser non
+        // puo farlo (CORS opaco su *.pages.dev). Il modal post-publish lo polla per sbloccare
+        // "Apri" solo quando l'indirizzo risponde davvero: al primo publish l'attivazione
+        // DNS/SSL di Cloudflare puo richiedere 30-90s, ai publish successivi e quasi immediata.
+        const prs = await getProject(store, id);
+        if (!prs.ok) return sendJson(res, 500, { ok: false, error: prs.error });
+        if (!prs.value) return sendJson(res, 404, { ok: false, error: { code: 'NOT_FOUND', message: 'Progetto non trovato.' } });
+        const siteUrl = prs.value.url;
+        if (!siteUrl) return sendJson(res, 200, { ok: true, live: false });
+        const probe = await fetchUrl(siteUrl, 'text/html', 6000);
+        const live = probe.ok && probe.res.ok; // 2xx = attivo; 522/530 (attivazione in corso) = non ancora
+        if (probe.ok) { try { void probe.res.body?.cancel(); } catch {} } // il contenuto non serve
+        return sendJson(res, 200, { ok: true, live });
+      }
       if (action === 'publish' && method === 'POST') {
         console.log('  \u23f1 publish_start: ' + id);
         const pubBody = await readJsonBody(req);
@@ -1738,10 +1857,10 @@ const server = createServer(async (req, res) => {
         // Sottodominio esplicito (prima pubblicazione o cambio da Impostazioni) vince;
         // altrimenti riusa quello gia pubblicato, infine l'id come fallback.
         const already = (pre.value.url || '').match(/https:\/\/([a-z0-9-]+)\.pages\.dev/i);
-        const projectName = subdomain || (already ? already[1] : pre.value.id);
+        const projectName = subdomain || already?.[1] || pre.value.id;
 
         const host = deliveryActive
-          ? makeCloudflarePagesResendHost({ ownerEmail: email as string, resendKey: RESEND_KEY, resendFrom: RESEND_FROM, projectName })
+          ? makeCloudflarePagesResendHost({ ownerEmail: email as string, resendKey: RESEND_KEY, projectName, ...(RESEND_FROM ? { resendFrom: RESEND_FROM } : {}) })
           : makeCloudflarePagesHost({ projectName });
         // Un sito in pausa non si ripubblica dal flusso normale: va riattivato (unlock).
         if (pre.value.status === 'locked' && !pre.value.entitled) {
@@ -1808,9 +1927,12 @@ const server = createServer(async (req, res) => {
         console.log('  → publish: scan + deploy su Cloudflare… (sottodominio: ' + projectName + ', recapito form: ' + (deliveryActive ? 'attivo' : 'NON attivo') + ')');
         const t0 = Date.now();
         const baseUrl = `https://${projectName}.pages.dev`;
-        const legalOpts = { name: String((pre.value && pre.value.spec && pre.value.spec.title) || projectName || id), email: (email as string) || '', legal: readLegal(id) };
+        const legalOpts = { name: publicBusinessName({ title: pre.value && pre.value.spec ? pre.value.spec.title : null, id, projectName }), email: (email as string) || '', legal: readLegal(id) };
+        const _bp = readBusinessProfile(id);
+        const _pizzaProfile = _bp && _bp.kind === 'pizzeria' ? _bp.data : undefined;
+        const _pizzaSeo = buildPizzeriaLocalSeo(_pizzaProfile, baseUrl);
         const r = await withTimeout(
-          publishProject({ store, id, scanner, host, materialize: (pages) => withContactLinks(withSiteHead(withVideoFacade(withBlockAssets(withLegal(withGuard(withOgMeta(assetStore.materialize(pages, id), baseUrl)), legalOpts))), { name: legalOpts.name })), trialDays: TRIAL_DAYS }),
+          publishProject({ store, id, scanner, host, materialize: (pages) => withContactLinks(withSiteHead(withVideoFacade(withBlockAssets(withLegal(withGuard(withOgMeta(withPizzeriaSeo(withPublicSanitize(withPizzeriaProfile(assetStore.materialize(pages, id), _pizzaProfile)), _pizzaSeo), baseUrl)), legalOpts))), { name: legalOpts.name })), trialDays: TRIAL_DAYS }),
           300_000,
           'La pubblicazione ha superato il tempo massimo ed e stata interrotta.',
         );
