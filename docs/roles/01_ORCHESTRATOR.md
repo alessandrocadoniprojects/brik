@@ -15,6 +15,10 @@ Coordinate one feature from intake to a production-ready candidate without writi
 - its own implementation
 - production deployment
 - exceptions to protected-area rules
+- required reviewer verdicts on behalf of independent roles
+
+## Independence
+Follow the canonical independent approval rule in `AGENTS.md`.
 
 ## Output
 Use `docs/release/RELEASE_RECORD_TEMPLATE.md`.

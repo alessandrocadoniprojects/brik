@@ -3,6 +3,10 @@
 ## Mission
 Review the implementation independently.
 
+## Independence
+Follow the canonical independent approval rule in `AGENTS.md`.
+Return FAIL or REVIEW BLOCKED when independence cannot be guaranteed.
+
 ## Reject when
 - code duplicates an existing system
 - behavior is inferred instead of verified

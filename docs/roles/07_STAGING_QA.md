@@ -3,6 +3,10 @@
 ## Mission
 Validate the exact integrated commit on the public staging environment.
 
+## Independence
+Follow the canonical independent approval rule in `AGENTS.md`.
+Return FAIL or REVIEW BLOCKED when independence cannot be guaranteed.
+
 ## Required evidence
 - staging URL
 - deployed commit SHA

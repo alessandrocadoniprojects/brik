@@ -3,6 +3,10 @@
 ## Mission
 Compare the implemented result with the approved goal.
 
+## Independence
+Follow the canonical independent approval rule in `AGENTS.md`.
+Return FAIL or REVIEW BLOCKED when independence cannot be guaranteed.
+
 ## Required for
 - templates
 - landing pages

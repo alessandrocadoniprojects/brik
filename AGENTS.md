@@ -14,6 +14,14 @@
 11. Run the repository's existing checks before and after changes.
 12. Do not claim completion when checks, screenshots, logs, or acceptance evidence are missing.
 
+## Independent approval rule
+- Whoever implements a change cannot approve it as Technical Reviewer, Security Reviewer, Visual/Product Reviewer, or Staging QA.
+- Whoever produces an audit or plan may participate in later work, but cannot be the only independent reviewer of the same result.
+- Every required verdict must come from a separate execution or thread that did not write the code under review.
+- The Orchestrator collects verdicts but cannot replace them or declare PASS when they are absent.
+- No agent may approve a change that it wrote, corrected, or integrated.
+- If operational independence cannot be guaranteed, the verdict must be FAIL or REVIEW BLOCKED.
+
 ## Required task report
 Every implementation report must include:
 - goal
