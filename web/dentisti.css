@@ -1,0 +1,153 @@
+@import url("/pizzerie.css");
+
+body {
+  background: #f7faf8;
+  color: #14201f;
+}
+
+.dentist-page .kicker {
+  color: #1f766d;
+}
+
+.dentist-page .lead {
+  color: #657472;
+}
+
+.dentist-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 26px;
+}
+
+.dentist-page .button {
+  display: inline-flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  padding: 0 22px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.dentist-page .button-primary {
+  background: #1f766d;
+  color: #fff;
+}
+
+.dentist-page .style-card {
+  color: inherit;
+  text-decoration: none;
+}
+
+.dentist-page .style-card .preview {
+  background-image:
+    linear-gradient(165deg, rgba(255, 255, 255, .96), rgba(238, 247, 245, .9)),
+    linear-gradient(135deg, rgba(191, 227, 222, .62), rgba(244, 239, 230, .78));
+  background-size: auto;
+  outline-color: rgba(31, 118, 109, .08);
+}
+
+.dentist-page .style-card .preview::before,
+.dentist-page .style-card .preview::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+}
+
+.dentist-page .style-card .preview::before {
+  left: 18%;
+  right: 18%;
+  top: 16%;
+  height: 34%;
+  border: 10px solid rgba(31, 118, 109, .18);
+  background: rgba(255, 255, 255, .72);
+}
+
+.dentist-page .style-card .preview::after {
+  left: 16%;
+  right: 16%;
+  bottom: 18%;
+  height: 18%;
+  background:
+    linear-gradient(90deg, #1f766d 0 24%, transparent 24% 31%, #b7a46a 31% 54%, transparent 54% 62%, #bfe3de 62% 100%);
+  opacity: .72;
+}
+
+.dentist-page .style-card:nth-child(2) .preview::before {
+  border-color: rgba(191, 227, 222, .68);
+}
+
+.dentist-page .style-card:nth-child(3) .preview::after {
+  background:
+    linear-gradient(90deg, #d7e7e4 0 20%, transparent 20% 28%, #1f766d 28% 50%, transparent 50% 58%, #14564f 58% 100%);
+}
+
+.dentist-page .style-card:nth-child(4) .preview::before {
+  background: rgba(244, 239, 230, .86);
+}
+
+.dentist-flow-shell {
+  display: block;
+}
+
+.dentist-flow {
+  counter-reset: flow;
+  display: grid;
+  gap: 12px;
+  margin: 30px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dentist-flow li {
+  counter-increment: flow;
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 12px;
+  align-items: start;
+  border: 1px solid #d7e7e4;
+  border-radius: 16px;
+  padding: 16px;
+  background: #f7faf8;
+}
+
+.dentist-flow li::before {
+  content: counter(flow);
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #eef7f5;
+  color: #14564f;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.dentist-flow strong,
+.dentist-flow span {
+  grid-column: 2;
+}
+
+.dentist-flow strong {
+  font-size: 17px;
+}
+
+.dentist-flow span {
+  color: #657472;
+  line-height: 1.45;
+}
+
+@media(max-width:560px) {
+  .dentist-actions,
+  .dentist-page .button {
+    width: 100%;
+  }
+
+  .dentist-flow li {
+    grid-template-columns: 36px 1fr;
+    padding: 14px;
+  }
+}
