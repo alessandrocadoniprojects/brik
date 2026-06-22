@@ -19,8 +19,8 @@ import { createServer } from 'node:http';
 import Stripe from 'stripe';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { randomBytes } from 'node:crypto';
-import { readdirSync, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { randomBytes, createHash } from 'node:crypto';
+import { readdirSync, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, appendFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
@@ -95,7 +95,48 @@ const ownersDir = fileURLToPath(new URL('../../data/owners/', import.meta.url));
 const conciergeDir = fileURLToPath(new URL('../../data/concierge/', import.meta.url));
 const genDir = fileURLToPath(new URL('../../data/gen/', import.meta.url)); // marker dei job di generazione asincroni
 const authDir = fileURLToPath(new URL('../../data/auth/', import.meta.url));
+const chatsDir = fileURLToPath(new URL('../../data/chats/', import.meta.url)); // transcript chat cliente↔AI, per il supporto operatori
 const authStore = makeAuthStore(authDir);
+
+// --- Log chat cliente↔AI (per il supporto operatori) ---
+// Append-only, una riga JSON per messaggio. L'id è usato come nome file: validato per evitare path traversal.
+const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
+function chatPath(id: string): string | null {
+  if (!SAFE_ID.test(id)) return null;
+  return join(chatsDir, id + '.jsonl');
+}
+function appendChat(id: string, role: 'user' | 'assistant', text: string): void {
+  const p = chatPath(id);
+  if (!p || !text) return;
+  try {
+    if (!existsSync(chatsDir)) mkdirSync(chatsDir, { recursive: true });
+    appendFileSync(p, JSON.stringify({ role, text: String(text).slice(0, 4000), at: new Date().toISOString() }) + '\n', 'utf8');
+  } catch (e) { console.log('  ✗ chat append', id, errStr(e)); }
+}
+function readChat(id: string, limit = 1000): Array<{ role: string; text: string; at: string }> {
+  const p = chatPath(id);
+  if (!p || !existsSync(p)) return [];
+  try {
+    const lines = readFileSync(p, 'utf8').split('\n').filter(Boolean);
+    const out: Array<{ role: string; text: string; at: string }> = [];
+    for (const ln of lines.slice(-limit)) {
+      try {
+        const m = JSON.parse(ln) as { role?: string; text?: string; at?: string };
+        if (m && typeof m.text === 'string') out.push({ role: m.role === 'assistant' ? 'assistant' : 'user', text: m.text, at: typeof m.at === 'string' ? m.at : '' });
+      } catch { /* salta riga corrotta */ }
+    }
+    return out;
+  } catch { return []; }
+}
+/** Cancella i transcript inattivi da oltre CHAT_TTL_DAYS (mtime del file = ultima attività). */
+function pruneChats(): void {
+  if (CHAT_TTL_DAYS <= 0 || !existsSync(chatsDir)) return;
+  const cutoff = Date.now() - CHAT_TTL_DAYS * 86_400_000;
+  for (const f of readdirSync(chatsDir)) {
+    if (!f.endsWith('.jsonl')) continue;
+    try { if (statSync(join(chatsDir, f)).mtimeMs < cutoff) rmSync(join(chatsDir, f), { force: true }); } catch { /* ignora */ }
+  }
+}
 const OPERATORS = parseOperatorEmails(process.env.OPERATOR_EMAILS); // tu + concierge
 const APP_URL = (process.env.APP_URL || ('http://localhost:' + PORT)).replace(/\/$/, '');
 const COOKIE_SECURE = APP_URL.startsWith('https'); // su localhost (http) il cookie Secure non verrebbe accettato
@@ -115,6 +156,35 @@ const STRIPE_PRICE_LAUNCH = process.env.STRIPE_PRICE_LAUNCH || 'price_1Te460HGRz
 const STRIPE_PRICE_YEARLY = process.env.STRIPE_PRICE_YEARLY || 'price_1Te47GHGRzZVUNFqkJJLcD4h'; // 49€/anno ricorrente
 const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET) : null;
 const STRIPE_READY = !!stripe && !!STRIPE_WEBHOOK_SECRET;
+
+// --- Meta Conversions API (tracking server-side degli eventi, es. Purchase) ---
+const META_PIXEL_ID = process.env.META_PIXEL_ID || '1611471957649385';
+const META_CAPI_TOKEN = process.env.META_CAPI_TOKEN || '';
+function _sha256(s: string): string { return createHash('sha256').update(s.trim().toLowerCase()).digest('hex'); }
+/** Invia un evento alla Conversions API di Meta. Fire-and-forget: non blocca il chiamante. */
+async function sendMetaCapi(eventName: string, opts: { value?: number; currency?: string; eventId?: string; email?: string } = {}): Promise<void> {
+  if (!META_CAPI_TOKEN) return; // token non configurato: no-op
+  try {
+    const user_data: Record<string, unknown> = {};
+    if (opts.email) user_data.em = [_sha256(opts.email)];
+    const payload = {
+      data: [{
+        event_name: eventName,
+        event_time: Math.floor(Date.now() / 1000),
+        action_source: 'website',
+        ...(opts.eventId ? { event_id: opts.eventId } : {}),
+        ...(Object.keys(user_data).length ? { user_data } : {}),
+        custom_data: { ...(opts.value != null ? { value: opts.value } : {}), currency: (opts.currency || 'EUR').toUpperCase() },
+      }],
+    };
+    const res = await fetch('https://graph.facebook.com/v21.0/' + META_PIXEL_ID + '/events?access_token=' + encodeURIComponent(META_CAPI_TOKEN), {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    if (!res.ok) console.log('  ✗ meta capi', eventName, res.status);
+    else console.log('  ✓ meta capi', eventName + (opts.value != null ? ' · ' + opts.value + (opts.currency || 'EUR') : ''));
+  } catch (e) { console.log('  ✗ meta capi', eventName, errStr(e)); }
+}
+
 function sessionUserOf(req: IncomingMessage): SessionUser | null {
   const id = parseCookies(req.headers.cookie)[SESSION_COOKIE];
   if (!id) return null;
@@ -188,6 +258,7 @@ const CONCIERGE_EMAIL = process.env.CONCIERGE_EMAIL || RESEND_FROM || '';
 const TRIAL_DAYS = Number(process.env.TRIAL_DAYS ?? 14);
 const EDIT_CAP = Number(process.env.EDIT_CAP ?? 10); // modifiche incluse nella prova (<=0 = nessun limite)
 const SWEEP_MINUTES = Number(process.env.LOCK_SWEEP_MINUTES ?? 60);
+const CHAT_TTL_DAYS = Number(process.env.CHAT_TTL_DAYS ?? 30); // dopo N giorni dall'ultima attività il transcript viene cancellato (0 = mai)
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 
 // ── Stripe: lettura raw body (per la firma) + entitlement ───────────────
@@ -209,6 +280,13 @@ async function setEntitled(id: string, value: boolean): Promise<void> {
   const f = await store.load(id);
   if (!f.ok || !f.value) return;
   const state = { ...f.value.state, entitled: value, updatedAt: new Date().toISOString() };
+  await store.save({ ...f.value, state });
+}
+async function setCustomDomain(id: string, domain: string | null): Promise<void> {
+  const f = await store.load(id);
+  if (!f.ok || !f.value) return;
+  const { customDomain: _drop, ...rest } = f.value.state;
+  const state = domain ? { ...rest, customDomain: domain, updatedAt: new Date().toISOString() } : { ...rest, updatedAt: new Date().toISOString() };
   await store.save({ ...f.value, state });
 }
 async function grantEntitlement(id: string): Promise<void> {
@@ -563,6 +641,7 @@ function stateView(state: SiteState) {
     pendingRoutes: pendingRoutesOf(state),
     entitled: !!state.entitled,
     trialEndsAt: state.trialEndsAt ?? null,
+    customDomain: state.customDomain ?? null,
     trialPhase: tp.phase,
     trialDaysLeft: tp.daysLeft,
     editCount: state.editCount ?? 0,
@@ -764,6 +843,44 @@ function readDomainRequests(limit = 50): unknown[] {
 
 // --- gating "trial poi lock" ---
 const CF_READY = !!(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID);
+const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID || '';
+const CF_TOKEN = process.env.CLOUDFLARE_API_TOKEN || '';
+
+// --- Domini personalizzati su Cloudflare Pages (self-service, solo CNAME) ---
+const CF_DOMAIN_RE = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/i;
+function cfDomainsBase(projectName: string): string {
+  return 'https://api.cloudflare.com/client/v4/accounts/' + CF_ACCOUNT + '/pages/projects/' + encodeURIComponent(projectName) + '/domains';
+}
+function cfHeaders(): Record<string, string> { return { authorization: 'Bearer ' + CF_TOKEN, 'content-type': 'application/json' }; }
+/** Aggiunge un dominio al progetto Pages. Idempotente: 409/già presente non è un errore. */
+async function cfAddDomain(projectName: string, domain: string): Promise<{ ok: boolean; status?: string; message?: string }> {
+  try {
+    const res = await fetch(cfDomainsBase(projectName), { method: 'POST', headers: cfHeaders(), body: JSON.stringify({ name: domain }) });
+    const j = await res.json().catch(() => ({})) as { success?: boolean; result?: { status?: string }; errors?: Array<{ code?: number; message?: string }> };
+    if (j.success) return { ok: true, ...(j.result?.status ? { status: j.result.status } : {}) };
+    const already = (j.errors || []).some((e) => e.code === 8000000 || /already|exist/i.test(e.message || ''));
+    if (already) return { ok: true, status: 'pending' };
+    return { ok: false, message: (j.errors && j.errors[0] && j.errors[0].message) || 'Cloudflare ha rifiutato il dominio.' };
+  } catch (e) { return { ok: false, message: errStr(e) }; }
+}
+/** Stato di un dominio del progetto: status (pending/active) + stato certificato. */
+async function cfGetDomain(projectName: string, domain: string): Promise<{ ok: boolean; status?: string; message?: string }> {
+  try {
+    const res = await fetch(cfDomainsBase(projectName) + '/' + encodeURIComponent(domain), { headers: cfHeaders() });
+    const j = await res.json().catch(() => ({})) as { success?: boolean; result?: { status?: string; certificate_authority?: string; validation_data?: { status?: string } }; errors?: Array<{ message?: string }> };
+    if (j.success && j.result) return { ok: true, ...(j.result.status ? { status: j.result.status } : {}) };
+    return { ok: false, message: (j.errors && j.errors[0] && j.errors[0].message) || 'Dominio non trovato.' };
+  } catch (e) { return { ok: false, message: errStr(e) }; }
+}
+async function cfDeleteDomain(projectName: string, domain: string): Promise<boolean> {
+  try {
+    const res = await fetch(cfDomainsBase(projectName) + '/' + encodeURIComponent(domain), { method: 'DELETE', headers: cfHeaders() });
+    return res.ok;
+  } catch { return false; }
+}
+/** True se il dominio è un apex (2 sole label, es. studioxyz.it) → non supportato via CNAME. */
+function looksLikeApex(domain: string): boolean { return domain.split('.').length <= 2; }
+
 
 /** Nome del progetto Cloudflare: dal sottodominio gia pubblicato, altrimenti l'id. */
 function projectNameOf(state: SiteState): string {
@@ -846,10 +963,10 @@ async function sweepTrials(): Promise<void> {
       const pr = await getProject(store, id);
       if (!pr.ok || !pr.value) continue;
       const st = pr.value;
-      if (st.status !== 'published') continue;
+      if (st.status !== 'published' && st.status !== 'preview' && st.status !== 'approved') continue;
       if (trialPhase(st).phase !== 'expired') continue;
-      const host = makeCloudflarePagesHost({ projectName: projectNameOf(st) });
-      const r = await lockProject({ store, id, host, placeholderPages: pausedPages(st) });
+      const onCf = st.status === 'published';
+      const r = await lockProject({ store, id, ...(onCf ? { host: makeCloudflarePagesHost({ projectName: projectNameOf(st) }) } : {}), placeholderPages: onCf ? pausedPages(st) : [] });
       if (r.ok) console.log('  ⏸ lock (prova scaduta):', id);
       else console.log('  ✗ lock', id, r.error.code);
     } catch (e) {
@@ -868,6 +985,7 @@ async function sweepTrials(): Promise<void> {
       }
     }
   } catch {}
+  pruneChats();
 }
 
 // --- routing ---
@@ -984,6 +1102,20 @@ const server = createServer(async (req, res) => {
     }
 
     // Dashboard attività: tutti i progetti con stato/prova + le richieste dominio. Solo dati locali.
+    // Transcript chat di un progetto (operatori): per il supporto durante la costruzione.
+    if (path === '/api/activity/chat' && method === 'GET') {
+      if (AUTH_REQUIRED) {
+        const me2 = sessionUserOf(req);
+        if (!me2) return sendJson(res, 401, { ok: false, error: { code: 'AUTH_REQUIRED', message: 'Accesso richiesto.' } });
+        if (!me2.isOperator) return sendJson(res, 403, { ok: false, error: { code: 'FORBIDDEN', message: 'Solo operatori.' } });
+      }
+      const cid = url.searchParams.get('id') || '';
+      const messages = readChat(cid);
+      let title = cid;
+      try { const r = await getProject(store, cid); if (r.ok && r.value) title = r.value.spec.title || cid; } catch { /* best-effort */ }
+      return sendJson(res, 200, { ok: true, id: cid, title, messages });
+    }
+
     if (path === '/api/activity' && method === 'GET') {
       if (AUTH_REQUIRED) {
         const me2 = sessionUserOf(req);
@@ -1363,6 +1495,9 @@ const server = createServer(async (req, res) => {
           const cs = event.data.object as Stripe.Checkout.Session;
           const siteId = cs.client_reference_id || (cs.metadata && cs.metadata.siteId) || '';
           if (siteId) await grantEntitlement(siteId);
+          const _amt = typeof cs.amount_total === 'number' ? cs.amount_total / 100 : undefined;
+          const _em = (cs.customer_details && cs.customer_details.email) || cs.customer_email || '';
+          void sendMetaCapi('Purchase', { ...(_amt != null ? { value: _amt } : {}), currency: (cs.currency || 'eur').toUpperCase(), eventId: 'purchase_' + cs.id, ...(_em ? { email: _em } : {}) });
           console.log('  ✓ stripe: pagamento ricevuto →', siteId || '(siteId mancante)');
         } else if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
           const sub = event.data.object as Stripe.Subscription;
@@ -1460,8 +1595,12 @@ const server = createServer(async (req, res) => {
       const _userTheme = (typeof body.theme === 'string' && isTheme(body.theme)) ? body.theme : undefined;
       const _genomeTheme = pizzeriaRecommendedTheme(_bp);
       const _effTheme = _userTheme || _genomeTheme;
-      const createOpts = { store, id, ownerId: 'web', description: fullDescription, llm, classifier, generator: buildGenerator, runQa, maxRepairs: 1, review: DIRECTOR_REVIEW, reviewMinScore: DIRECTOR_MIN_SCORE, ...(content ? { content } : {}), ...(_effTheme ? { theme: _effTheme } : {}), ...(typeof body.saasVisual === 'string' ? { saasVisual: body.saasVisual } : {}), ...(body.variant === 'dark' || body.variant === 'light' ? { variant: body.variant } : {}), ...(_genomeNotes.length ? { extraCreativeNotes: _genomeNotes } : {}) };
+      // Prova: parte dalla creazione (TRIAL_DAYS). Operatori e account gratis ne sono esenti.
+      const _meCreate = sessionUserOf(req);
+      const _trialDaysCreate = (_meCreate?.isOperator || isFreeEmail(_meCreate?.email)) ? 0 : TRIAL_DAYS;
+      const createOpts = { store, id, ownerId: 'web', description: fullDescription, llm, classifier, generator: buildGenerator, runQa, maxRepairs: 1, review: DIRECTOR_REVIEW, reviewMinScore: DIRECTOR_MIN_SCORE, ...(_trialDaysCreate > 0 ? { trialDays: _trialDaysCreate } : {}), ...(content ? { content } : {}), ...(_effTheme ? { theme: _effTheme } : {}), ...(typeof body.saasVisual === 'string' ? { saasVisual: body.saasVisual } : {}), ...(body.variant === 'dark' || body.variant === 'light' ? { variant: body.variant } : {}), ...(_genomeNotes.length ? { extraCreativeNotes: _genomeNotes } : {}) };
       const jobGuestId = guestId;
+      appendChat(id, 'user', fullDescription);
       // La build gira in background: nessuna connessione HTTP tenuta aperta 3-4 min (era la causa dei "siti persi").
       void (async () => {
         const t0 = Date.now();
@@ -1513,7 +1652,7 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 202, { ok: true, id, gen: 'generating' });
     }
 
-    const apiMatch = path.match(/^\/api\/projects\/([^/]+)(?:\/(edit|edit-clarify|approve|publish|publish-status|revert|page|theme|email|delete|concierge|unlock|lock|checkout))?$/);
+    const apiMatch = path.match(/^\/api\/projects\/([^/]+)(?:\/(edit|edit-clarify|approve|publish|publish-status|revert|page|theme|email|delete|concierge|unlock|lock|checkout|domain))?$/);
     if (apiMatch) {
       const id = decodeURIComponent(apiMatch[1] as string);
       const action = apiMatch[2];
@@ -1593,18 +1732,63 @@ const server = createServer(async (req, res) => {
       if (action === 'lock' && method === 'POST') {
         const body = await readJsonBody(req);
         const token = (typeof body.token === 'string' && body.token) || ((req.headers['x-admin-token'] as string) ?? '');
-        if (!ADMIN_TOKEN || token !== ADMIN_TOKEN) return sendJson(res, 403, { ok: false, error: { code: 'FORBIDDEN', message: 'Operazione riservata.' } });
+        const _meLock = sessionUserOf(req);
+        const _lockAuthOk = (ADMIN_TOKEN && token === ADMIN_TOKEN) || (_meLock && _meLock.isOperator);
+        if (!_lockAuthOk) return sendJson(res, 403, { ok: false, error: { code: 'FORBIDDEN', message: 'Operazione riservata.' } });
         const pr = await getProject(store, id);
         if (!pr.ok || !pr.value) return sendJson(res, 404, { ok: false, error: { code: 'PROJECT_NOT_FOUND', message: 'Progetto non trovato.' } });
-        const host = makeCloudflarePagesHost({ projectName: projectNameOf(pr.value) });
+        const _onCfLock = pr.value.status === 'published';
         const r = await withTimeout(
-          lockProject({ store, id, host, placeholderPages: pausedPages(pr.value) }),
+          lockProject({ store, id, ...(_onCfLock ? { host: makeCloudflarePagesHost({ projectName: projectNameOf(pr.value) }) } : {}), placeholderPages: _onCfLock ? pausedPages(pr.value) : [] }),
           300_000,
           'La pausa ha superato il tempo massimo.',
         );
         if (!r.ok) return sendJson(res, 400, { ok: false, error: r.error });
         console.log('  ⏸ lock (manuale):', id);
         return sendJson(res, 200, { ok: true, ...withSummary(r.value) });
+      }
+
+      // Dominio personalizzato self-service (solo CNAME/sottodominio; l'apex resta concierge).
+      if (action === 'domain') {
+        if (!CF_READY) return sendJson(res, 503, { ok: false, error: { code: 'HOSTING_OFF', message: 'Hosting non configurato.' } });
+        const pr = await getProject(store, id);
+        if (!pr.ok || !pr.value) return sendJson(res, 404, { ok: false, error: { code: 'PROJECT_NOT_FOUND', message: 'Progetto non trovato.' } });
+        const meDom = sessionUserOf(req);
+        const ownerDom = (readOwnerEmail(id) || '').toLowerCase();
+        if (!meDom || (!meDom.isOperator && ownerDom && ownerDom !== (meDom.email || '').toLowerCase())) {
+          return sendJson(res, 403, { ok: false, error: { code: 'FORBIDDEN', message: 'Accedi con l\'account proprietario del sito.' } });
+        }
+        const proj = projectNameOf(pr.value);
+        const cnameValue = proj + '.pages.dev';
+        const cnameOf = (d: string) => ({ type: 'CNAME', name: d.split('.')[0], value: cnameValue });
+
+        if (method === 'GET') {
+          const dom = pr.value.customDomain;
+          if (!dom) return sendJson(res, 200, { ok: true, domain: null });
+          const st = await cfGetDomain(proj, dom);
+          return sendJson(res, 200, { ok: true, domain: dom, cname: cnameOf(dom), status: st.status || 'pending' });
+        }
+
+        if (method === 'POST') {
+          if (pr.value.status !== 'published') return sendJson(res, 400, { ok: false, error: { code: 'NOT_PUBLISHED', message: 'Pubblica prima il sito, poi collega il dominio.' } });
+          const body = await readJsonBody(req);
+          let domain = (typeof body.domain === 'string' ? body.domain : '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/\.$/, '');
+          if (!domain || !CF_DOMAIN_RE.test(domain)) return sendJson(res, 400, { ok: false, error: { code: 'BAD_DOMAIN', message: 'Inserisci un dominio valido, es. www.tuonome.it' } });
+          if (looksLikeApex(domain)) return sendJson(res, 400, { ok: false, error: { code: 'APEX', message: 'Il dominio senza www va configurato dal concierge. Qui collega www.' + domain + '.' } });
+          const add = await cfAddDomain(proj, domain);
+          if (!add.ok) return sendJson(res, 400, { ok: false, error: { code: 'CF_REJECTED', message: add.message || 'Cloudflare ha rifiutato il dominio.' } });
+          await setCustomDomain(id, domain);
+          console.log('  🌐 dominio collegato:', domain, '→', cnameValue);
+          return sendJson(res, 200, { ok: true, domain, cname: cnameOf(domain), status: add.status || 'pending' });
+        }
+
+        if (method === 'DELETE') {
+          const dom = pr.value.customDomain;
+          if (dom) await cfDeleteDomain(proj, dom);
+          await setCustomDomain(id, null);
+          console.log('  🌐 dominio scollegato:', dom || '(nessuno)');
+          return sendJson(res, 200, { ok: true, domain: null });
+        }
       }
 
       // Avvia il pagamento (Stripe Checkout): 149€ subito + 49€/anno dal 2° anno (trial 365g).
@@ -1753,6 +1937,7 @@ const server = createServer(async (req, res) => {
         const photos = allPhotos.map((p, i) => (newCount > 0 && i >= allPhotos.length - newCount ? { ...p, isNew: true } : p));
         const buildGenerator = generatorWith(photos);
         console.log('  → edit:', instruction + (content ? ' (+testo)' : '') + (newCount ? ' (+' + newCount + ' foto)' : ''));
+        appendChat(id, 'user', instruction);
         const t0 = Date.now();
         const r = await withTimeout(
           withGenRetry('edit', 3, () => editProject({ store, id, instruction, llm, generator: buildGenerator, runQa, editCap: EDIT_CAP, ...(content ? { content } : {}) })),
@@ -1761,11 +1946,14 @@ const server = createServer(async (req, res) => {
         );
         if (!r.ok) {
           console.log('  ✗ edit:', r.error.code, r.error.message);
+          appendChat(id, 'assistant', '⚠️ Errore: ' + r.error.message);
           return sendJson(res, 400, { ok: false, error: r.error });
         }
         console.log('  ✓ edit in', ((Date.now() - t0) / 1000).toFixed(1), 's —', r.value.accepted ? 'applicata' : 'rifiutata');
-        if (r.value.accepted) metricInc('edited');
-        else { const who = readOwnerEmail(id) || sessionUserOf(req)?.email || ''; addFeedback({ kind: 'modifica-non-applicata', text: instruction, projectId: id, ...(who ? { email: who } : {}) }); }
+        if (r.value.accepted) {
+          metricInc('edited');
+          appendChat(id, 'assistant', 'Modifica applicata' + (r.value.changes && r.value.changes.length ? ': ' + r.value.changes.join('; ') : '.'));
+        } else { const who = readOwnerEmail(id) || sessionUserOf(req)?.email || ''; addFeedback({ kind: 'modifica-non-applicata', text: instruction, projectId: id, ...(who ? { email: who } : {}) }); appendChat(id, 'assistant', 'Non sono riuscito ad applicare la modifica' + (r.value.conflicts && r.value.conflicts.length ? ': ' + r.value.conflicts.join('; ') : '.')); }
         return sendJson(res, 200, {
           ok: true,
           accepted: r.value.accepted,
@@ -1984,7 +2172,7 @@ server.listen(PORT, () => {
 
 // Sweep periodico del trial (solo se Cloudflare e configurato: il lock deploya una pagina di pausa).
 let sweepTimer: ReturnType<typeof setInterval> | undefined;
-if (CF_READY && SWEEP_MINUTES > 0) {
+if (SWEEP_MINUTES > 0) {
   sweepTimer = setInterval(() => { void sweepTrials(); }, SWEEP_MINUTES * 60_000);
   setTimeout(() => { void sweepTrials(); }, 30_000); // primo giro poco dopo l'avvio
 }

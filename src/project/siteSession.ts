@@ -173,6 +173,8 @@ export async function createHome(args: {
   readonly variant?: string;
   /** Interno: genera TUTTE le route in un colpo (comportamento legacy, no placeholder). */
   readonly allRoutes?: boolean;
+  /** Giorni di prova: se > 0, il sito nasce con trialEndsAt (timer dalla creazione). 0/assente = nessun timer. */
+  readonly trialDays?: number;
 }): Promise<Result<{ state: SiteState; summary: SiteSummary; report: QaReport; completion: CompletionPlan }>> {
   const existing = await args.store.load(args.id);
   if (!existing.ok) return err(existing.error);
@@ -338,6 +340,7 @@ export async function createHome(args: {
     status: 'preview',
     version: 1,
     updatedAt: now(),
+    ...(args.trialDays && args.trialDays > 0 ? { trialEndsAt: new Date(Date.now() + args.trialDays * 86_400_000).toISOString() } : {}),
     ...(savedCreative ? { creativeDirection: savedCreative } : {}),
     ...(pendingRoutes.length ? { pendingRoutes } : {}),
   };

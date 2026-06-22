@@ -50,6 +50,8 @@ export interface SiteState {
   readonly entitled?: boolean;
   /** Fine del periodo di prova (ISO). Oltre questa data, se non entitled, il sito va in lock. */
   readonly trialEndsAt?: string;
+  /** Dominio personalizzato collegato dal cliente (es. www.studioxyz.it). Assente = solo .pages.dev. */
+  readonly customDomain?: string;
   /** Modifiche ACCETTATE finora (per il cap di prova). Assente = 0. */
   readonly editCount?: number;
   /** Direzione creativa congelata alla creazione, per la finalizzazione premium al publish. */

@@ -18,6 +18,7 @@ const SYSTEM = [
   'Fai domande SOLO se manca un dettaglio che ti impedirebbe di eseguire bene la modifica. Casi tipici: "aggiungi X" senza dire su quale pagina o sezione; oppure mancano i dati necessari (es. "aggiungi una mappa" -> quale indirizzo?; "aggiungi i prezzi" -> quali?; "aggiungi una sezione" -> con quali contenuti?).',
   'Massimo 2 domande, brevissime e riferite a QUESTO sito. Per il "dove" proponi come opzioni le pagine reali (usa i loro nomi). Per i dettagli, lascia risposta libera oppure proponi 2-4 opzioni concrete quando ha senso.',
   'NON chiedere cose ovvie o gia deducibili dall istruzione, ne dettagli tecnici (hosting, dominio, codice). Nel dubbio tra fare una domanda banale e non farla, NON farla.',
+  'VIETATO: non chiedere MAI il settore, l industria o il "tipo di azienda/attivita" del sito: sono GIA definiti dal sito esistente e una risposta li sovrascriverebbe, stravolgendo i contenuti (es. un dentista che diventa una societa di consulenza). Puoi invece chiarire DOVE applicare la modifica, il tono/stile desiderato e dettagli FATTUALI (indirizzi, prezzi, orari, contenuti specifici).',
   'Rispondi SOLO con JSON valido (nessun markdown):',
   '{"questions":[{"question":"In quale pagina aggiungo la mappa?","options":["Home","Contatti"]},{"question":"Qual e l indirizzo esatto da mostrare?"}]}',
 ].join('\n');
@@ -54,6 +55,10 @@ export async function planEditClarification(args: {
   if (!res.ok) return err(res.error);
 
   const out: IntakeQuestion[] = [];
+  // Rete di sicurezza deterministica: scarta SOLO le domande che ridefinirebbero il tipo di
+  // attività (settore/industria), le uniche che stravolgono l'identità del sito. Tono, target,
+  // stile e dettagli restano consentiti: chiarirli non cambia il tipo di business.
+  const BANNED = /settor|industr|tipo di (?:azienda|attivit|business|impresa)/i;
   try {
     const p = JSON.parse(stripToJson(res.value.text)) as { questions?: unknown };
     const arr = Array.isArray(p.questions) ? p.questions : [];
@@ -62,6 +67,7 @@ export async function planEditClarification(args: {
       const obj = q as Record<string, unknown>;
       const question = typeof obj.question === 'string' ? obj.question.trim() : '';
       if (!question) continue;
+      if (BANNED.test(question)) continue;
       const rawOpts = Array.isArray(obj.options) ? obj.options : [];
       const options = rawOpts.map((o) => String(o).trim()).filter((o) => o.length > 0).slice(0, 4);
       out.push(options.length ? { question, options } : { question });

@@ -38,6 +38,11 @@ const settingsSave = $('settingsSave');
 const settingsMsg = $('settingsMsg');
 const addrNote = $('addrNote');
 const conciergeBtn = $('conciergeBtn');
+const cdInput = $('cdInput');
+const cdLink = $('cdLink');
+const cdPanel = $('cdPanel');
+const cdMsg = $('cdMsg');
+const customDomainRow = $('customDomainRow');
 const mobileTabs = $('mobileTabs');
 const ctxbar = $('ctxbar');
 const askbar = $('askbar');
@@ -103,6 +108,7 @@ async function api(method, path, body) {
 
 async function startCheckout() {
   if (!currentId) return;
+  try { if (window.fbq) fbq('track', 'InitiateCheckout', { value: 149, currency: 'EUR' }); } catch (e) {}
   try {
     const r = await api('POST', '/api/projects/' + encodeURIComponent(currentId) + '/checkout');
     if (r && r.ok && r.url) { window.location.href = r.url; return; }
@@ -322,6 +328,7 @@ function renderState(data) {
   currentId = st.id;
   currentStatus = st.status;
   currentUrl = st.url || '';
+  try { updatePlanChip(st); } catch (e) {}
   renderGating(st);
   renderRoutes(st);
   // Fast Preview: se restano pagine interne in preparazione, avvia un polling leggero
@@ -1189,6 +1196,9 @@ function openSettings() {
     addrRow.hidden = !sub;
     if (sub && ownerAddrInput) { ownerAddrInput.value = sub; refreshAddrNote(); }
   }
+  if (customDomainRow) customDomainRow.hidden = !sub;
+  if (cdMsg) cdMsg.textContent = '';
+  if (sub) loadCustomDomain(); else if (cdPanel) { cdPanel.hidden = true; cdPanel.innerHTML = ''; }
   if (settingsMsg) { settingsMsg.style.color = ''; settingsMsg.textContent = authUser ? '' : 'Per salvare email, dati legali e stile serve un account: accedi e queste informazioni restano sul tuo sito.'; }
   if (settingsSave) settingsSave.textContent = authUser ? 'Salva impostazioni' : 'Accedi per salvare';
   settings.hidden = false;
@@ -1282,6 +1292,64 @@ async function saveAllSettings() {
     settingsMsg.textContent = human;
   }
 }
+
+function _cdStatusLabel(status) {
+  if (status === 'active') return { dot: '🟢', text: 'Dominio attivo.' };
+  if (status === 'pending' || status === 'initializing' || status === 'pending_validation') return { dot: '🟡', text: 'In attesa: aggiungi il record qui sotto e attendi la propagazione (anche fino a ~1 ora), poi premi Verifica.' };
+  return { dot: '🟡', text: 'In attesa di verifica. Se hai appena aggiunto il record, attendi qualche minuto e premi Verifica.' };
+}
+function renderDomainPanel(data) {
+  if (!cdPanel) return;
+  if (!data || !data.domain) { cdPanel.hidden = true; cdPanel.innerHTML = ''; if (cdInput) cdInput.value = ''; return; }
+  const c = data.cname || {};
+  const s = _cdStatusLabel(data.status);
+  cdPanel.hidden = false;
+  if (cdInput) cdInput.value = '';
+  cdPanel.innerHTML =
+    '<div style="font-size:13px;line-height:1.5">' +
+    '<div style="margin-bottom:6px"><strong>' + escapeHtml(data.domain) + '</strong> — ' + s.dot + ' ' + escapeHtml(s.text) + '</div>' +
+    '<div style="background:var(--panel-2,#f4f4f8);border-radius:8px;padding:8px 10px;margin:6px 0">' +
+      'Aggiungi questo record dal pannello del tuo provider DNS:<br>' +
+      '<span style="font-family:monospace;font-size:12.5px">Tipo <b>' + escapeHtml(c.type || 'CNAME') + '</b> · Nome <b>' + escapeHtml(c.name || 'www') + '</b> · Valore <b>' + escapeHtml(c.value || '') + '</b></span> ' +
+      '<button type="button" class="btn ghost" data-cd="copy" data-val="' + escapeHtml(c.value || '') + '" style="padding:2px 8px;font-size:12px">Copia</button>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:6px">' +
+      '<button type="button" class="btn ghost" data-cd="verify" style="padding:4px 10px;font-size:13px">Verifica</button>' +
+      '<button type="button" class="btn ghost" data-cd="unlink" style="padding:4px 10px;font-size:13px;opacity:.6">Scollega</button>' +
+    '</div></div>';
+}
+async function loadCustomDomain() {
+  if (!currentId || !cdPanel) return;
+  try { const d = await api('GET', '/api/projects/' + encodeURIComponent(currentId) + '/domain'); if (d && d.ok) renderDomainPanel(d); } catch (e) {}
+}
+async function linkCustomDomain() {
+  if (!currentId || !cdInput) return;
+  const domain = (cdInput.value || '').trim();
+  if (!domain) { cdInput.focus(); return; }
+  if (cdMsg) { cdMsg.style.color = ''; cdMsg.textContent = 'Collego…'; }
+  const d = await api('POST', '/api/projects/' + encodeURIComponent(currentId) + '/domain', { domain });
+  if (d && d.ok) { if (cdMsg) cdMsg.textContent = ''; renderDomainPanel(d); }
+  else if (cdMsg) { cdMsg.style.color = 'var(--danger,#c0392b)'; cdMsg.textContent = (d && d.error && d.error.message) || 'Non riesco a collegare il dominio.'; }
+}
+async function verifyCustomDomain() {
+  if (!currentId) return;
+  if (cdMsg) { cdMsg.style.color = ''; cdMsg.textContent = 'Verifico…'; }
+  const d = await api('GET', '/api/projects/' + encodeURIComponent(currentId) + '/domain');
+  if (d && d.ok) { if (cdMsg) cdMsg.textContent = ''; renderDomainPanel(d); }
+}
+async function unlinkCustomDomain() {
+  if (!currentId) return;
+  const d = await api('DELETE', '/api/projects/' + encodeURIComponent(currentId) + '/domain');
+  if (d && d.ok) { if (cdMsg) cdMsg.textContent = ''; renderDomainPanel({ domain: null }); }
+}
+if (cdLink) cdLink.addEventListener('click', linkCustomDomain);
+if (cdPanel) cdPanel.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-cd]'); if (!b) return;
+  const act = b.getAttribute('data-cd');
+  if (act === 'copy') { try { navigator.clipboard.writeText(b.getAttribute('data-val') || ''); const t = b.textContent; b.textContent = 'Copiato'; setTimeout(() => { b.textContent = t; }, 1200); } catch (e) {} }
+  else if (act === 'verify') verifyCustomDomain();
+  else if (act === 'unlink') unlinkCustomDomain();
+});
 
 function openConciergeDialog() {
   if (!currentId) return;
@@ -1605,6 +1673,53 @@ function askPizzeriaVertical(questions, onComplete) {
   }
 
   step();
+}
+
+function _showPlansPanel() {
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10001;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow:auto;';
+  const hasSite = !!currentId;
+  ov.innerHTML = '<div role="dialog" aria-modal="true" style="background:#fff;color:#111;max-width:460px;width:100%;border-radius:16px;padding:20px 22px 18px;box-shadow:0 24px 70px rgba(0,0,0,.4);">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><strong style="font-size:18px;">Piani e prezzi</strong><button id="plansClose" type="button" style="border:0;background:#eee;border-radius:8px;padding:6px 11px;cursor:pointer;font-size:15px;">\u2715</button></div>'
+    + '<div style="border:1px solid #e6e6ee;border-radius:12px;padding:14px;margin-bottom:12px;">'
+    +   '<div style="font-size:15px;font-weight:700;">Sito singolo</div>'
+    +   '<div style="font-size:22px;font-weight:800;margin:4px 0;">149\u20ac <span style="font-size:13px;font-weight:500;color:#777;">primo anno</span></div>'
+    +   '<div style="font-size:13.5px;color:#555;">Poi 49\u20ac/anno. Hosting, dominio e assistenza inclusi. Costruire e provare resta gratis.</div>'
+    + '</div>'
+    + '<div style="font-size:13.5px;color:#555;line-height:1.5;margin-bottom:12px;">Hai <strong>3 giorni di prova</strong> dalla creazione. Allo scadere, se non attivi il sito, va <strong>in pausa</strong>: resta salvato ma non pi\u00f9 modificabile finch\u00e9 non passi al piano a pagamento.</div>'
+    + '<div style="font-size:12px;color:#999;margin-bottom:14px;">Altri piani in arrivo.</div>'
+    + (hasSite ? '<button id="plansCheckout" type="button" style="width:100%;border:0;border-radius:10px;padding:12px;font-size:15px;font-weight:700;background:#5b5bf0;color:#fff;cursor:pointer;">Attiva il sito \u00b7 149\u20ac</button>' : '')
+    + '</div>';
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  const cb = ov.querySelector('#plansClose'); if (cb) cb.onclick = close;
+  const co = ov.querySelector('#plansCheckout'); if (co) co.onclick = () => { close(); startCheckout(); };
+  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+}
+
+// Chip "Piani" discreto e sempre visibile in cima alla chat: informa della prova senza bloccare.
+let _planChip = null;
+function _ensurePlanChip() {
+  if (_planChip) return;
+  const host = document.querySelector('section.preview') || document.querySelector('section.chat');
+  if (!host) return;
+  _planChip = document.createElement('button');
+  _planChip.type = 'button';
+  _planChip.id = 'planChip';
+  _planChip.hidden = true;
+  _planChip.style.cssText = 'display:block;width:100%;flex:0 0 auto;border:0;border-bottom:1px solid var(--line-2,#e2e2ec);background:var(--panel-2,#f4f4f8);color:inherit;padding:7px 12px;font-size:12.5px;line-height:1.2;cursor:pointer;text-align:center;';
+  _planChip.onclick = _showPlansPanel;
+  host.insertBefore(_planChip, host.firstChild);
+}
+function updatePlanChip(st) {
+  _ensurePlanChip();
+  if (!_planChip) return;
+  let txt = 'Piani e prezzi';
+  if (st && st.entitled) txt = '\u2713 Piano attivo';
+  else if (st && st.status === 'locked') txt = '\u23f8 In pausa \u00b7 riattiva';
+  else if (st && st.trialPhase === 'trial' && st.trialDaysLeft != null) txt = '\ud83c\udf81 Prova gratuita \u00b7 ' + st.trialDaysLeft + 'g rimast' + (st.trialDaysLeft === 1 ? 'o' : 'i');
+  _planChip.innerHTML = txt + ' <span style="opacity:.55;">\u24d8</span>';
+  _planChip.hidden = false;
 }
 
 async function beginCreate(description, sources = [], images = [], attachedNames = []) {
@@ -2123,6 +2238,7 @@ async function pollUntilReady(id, { intervalMs = 3000, maxMs = 12 * 60_000 } = {
 
 async function createSite(description, answers, sources = [], images = [], theme = '', opts = {}) {
   const t = thinking('Costruisco una prima bozza');
+  addMsg('bot', '<p>La prima generazione può richiedere <strong>fino a ~10 minuti</strong>: Brik scrive i testi, sceglie lo stile e crea le pagine. È normale — lascialo lavorare senza ricaricare.</p>');
   setBusy(true, 'Sto costruendo la bozza…');
   setMobileView('preview');
   // Se l'utente è arrivato da un link-invito, manda il token: il server toglie il tetto ospite di 1 sito.
@@ -2151,6 +2267,7 @@ async function createSite(description, answers, sources = [], images = [], theme
   saveLastProject(currentId);
   loadPreview(data.state.id, data.state.version);
   await refreshProjects(data.state.id);
+  try { if (window.fbq) fbq('track', 'Lead'); } catch (e) {}
   addMsg('bot', `<p>Ecco una <strong>prima bozza</strong> — costruita e verificata. Guardala qui a fianco: ora rifiniamola insieme.</p>${summaryHtml(data.summary)}<p class="tiny">Dimmi cosa cambiare (testi, sezioni, colori, foto), oppure premi «Visita il sito» quando vuoi vederlo online.</p>`, 'ok-note');
 }
 
@@ -2225,7 +2342,13 @@ async function doEdit(instruction, sources = [], images = []) {
     const changes = (data.changes || []).length
       ? `<p class="tiny">Modifiche: ${escapeHtml(data.changes.join(' · '))}</p>`
       : '';
-    addMsg('bot', `<p>Modifica applicata.</p>${changes}${summaryHtml(data.summary)}`, 'ok-note');
+    const _editMsg = addMsg('bot', `<p>Modifica applicata.</p>${changes}${summaryHtml(data.summary)}<p style="margin-top:9px;"><button type="button" data-revert-last="1" title="Torna alla versione precedente" style="border:1px solid var(--line-2,#33384a);background:transparent;color:inherit;border-radius:8px;padding:5px 11px;font-size:12.5px;cursor:pointer;opacity:.6;transition:opacity .15s;">↩ Versione precedente</button></p>`, 'ok-note');
+    const _rb = _editMsg && _editMsg.querySelector ? _editMsg.querySelector('[data-revert-last]') : null;
+    if (_rb) {
+      _rb.addEventListener('mouseenter', () => { _rb.style.opacity = '1'; });
+      _rb.addEventListener('mouseleave', () => { _rb.style.opacity = '.6'; });
+      _rb.onclick = () => { _rb.disabled = true; _rb.style.opacity = '.4'; revert(); };
+    }
   } else {
     const list = (data.conflicts || []).map((c) => `<li>${escapeHtml(c.detail || c.kind)}</li>`).join('');
     addMsg('bot', `<p>Non posso applicarla: romperebbe qualcosa che avevi già chiesto.</p><ul>${list}</ul><p class="tiny">Il sito resta com'era. Riformula la richiesta o cambia il requisito esplicitamente.</p>`, 'err');
@@ -3085,6 +3208,8 @@ async function openActivity() {
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
         ${p.entitled ? '<span style="font-size:11px;font-weight:700;color:#1c7a4a;background:#e3f6ec;border-radius:6px;padding:2px 8px;">GRATIS ATTIVO</span>' : ''}
         <button data-entitle-id="${escapeHtml(p.id)}" data-entitle-val="${p.entitled ? '0' : '1'}" type="button" style="border:0;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;font-weight:600;${p.entitled ? 'background:#f1d6d6;color:#9b2c2c;' : 'background:#1c7a4a;color:#fff;'}">${p.entitled ? 'Disattiva gratis' : 'Attiva gratis'}</button>
+        <button data-chat-id="${escapeHtml(p.id)}" data-chat-title="${escapeHtml(p.title || p.id)}" type="button" style="border:0;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;font-weight:600;background:#e7e7ee;color:#333;">💬 Chat</button>
+        ${(!p.entitled && p.status !== 'locked' && p.trialEndsAt && new Date(p.trialEndsAt) < new Date()) ? `<button data-pause-id="${escapeHtml(p.id)}" type="button" style="border:0;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;font-weight:600;background:#fde8c8;color:#8a5a12;">⏸ Metti in pausa</button>` : ''}
       </div>
     </div>`;
   }).join('') : '<p style="color:#999;padding:8px 2px;">Nessun sito ancora.</p>';
@@ -3134,6 +3259,40 @@ async function openActivity() {
       const value = btn.getAttribute('data-entitle-val') === '1';
       btn.disabled = true; const prev = btn.textContent; btn.textContent = '…';
       const r = await api('POST', `/api/projects/${encodeURIComponent(id)}/entitle`, { value });
+      if (r && r.ok) { openActivity(); }
+      else { btn.disabled = false; btn.textContent = prev; alert((r && r.error && r.error.message) || 'Operazione non riuscita.'); }
+    };
+  });
+  body.querySelectorAll('[data-chat-id]').forEach((btn) => {
+    btn.onclick = async () => {
+      const id = btn.getAttribute('data-chat-id');
+      const title = btn.getAttribute('data-chat-title') || id;
+      const cov = document.createElement('div');
+      cov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow:auto;';
+      cov.innerHTML = '<div style="background:#fff;color:#111;max-width:640px;width:100%;border-radius:14px;padding:16px 18px;box-shadow:0 20px 60px rgba(0,0,0,.35);"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><strong style="font-size:16px;">\uD83D\uDCAC ' + escapeHtml(title) + '</strong><button id="chatClose" type="button" style="border:0;background:#eee;border-radius:8px;padding:6px 11px;cursor:pointer;font-size:15px;">\u2715</button></div><div id="chatBody"><p style="color:#666;">Carico\u2026</p></div></div>';
+      document.body.appendChild(cov);
+      const closeC = () => cov.remove();
+      cov.addEventListener('click', (e) => { if (e.target === cov) closeC(); });
+      const cbtn = cov.querySelector('#chatClose'); if (cbtn) cbtn.onclick = closeC;
+      const cbody = cov.querySelector('#chatBody');
+      let cd;
+      try { cd = await api('GET', '/api/activity/chat?id=' + encodeURIComponent(id)); } catch { cd = null; }
+      if (!cd || !cd.ok) { cbody.innerHTML = '<p style="color:#b00;">Impossibile caricare la chat.</p>'; return; }
+      const msgs = cd.messages || [];
+      if (!msgs.length) { cbody.innerHTML = '<p style="color:#999;">Nessun messaggio ancora.</p>'; return; }
+      const fmtT = (s) => { try { return s ? new Date(s).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''; } catch { return ''; } };
+      cbody.innerHTML = msgs.map((m) => {
+        const me = m.role === 'user';
+        return '<div style="display:flex;justify-content:' + (me ? 'flex-end' : 'flex-start') + ';margin:6px 0;"><div style="max-width:80%;background:' + (me ? '#eef0ff' : '#f3f3f5') + ';border-radius:12px;padding:8px 11px;font-size:13.5px;line-height:1.4;white-space:pre-wrap;word-break:break-word;">' + escapeHtml(m.text) + '<div style="font-size:10.5px;color:#999;margin-top:4px;">' + (me ? 'Cliente' : 'AI') + ' \u00b7 ' + escapeHtml(fmtT(m.at)) + '</div></div></div>';
+      }).join('');
+    };
+  });
+  body.querySelectorAll('[data-pause-id]').forEach((btn) => {
+    btn.onclick = async () => {
+      const id = btn.getAttribute('data-pause-id');
+      if (!confirm('Mettere in pausa questo sito scaduto? Resta salvato ma non più modificabile finché il proprietario non lo attiva.')) return;
+      btn.disabled = true; const prev = btn.textContent; btn.textContent = '…';
+      const r = await api('POST', `/api/projects/${encodeURIComponent(id)}/lock`);
       if (r && r.ok) { openActivity(); }
       else { btn.disabled = false; btn.textContent = prev; alert((r && r.error && r.error.message) || 'Operazione non riuscita.'); }
     };
@@ -3506,6 +3665,7 @@ async function maybeRedeemInvite() {
     if (_pp && landingInput) {
       landingInput.value = _pp;
       showLanding();
+      try { if (window.fbq) fbq('trackCustom', 'AvvioIntake', { source: 'campagna', prompt: String(_pp).slice(0, 60) }); } catch (e) {}
       history.replaceState(null, '', location.pathname);
       setTimeout(() => { startFromLanding(_pp); }, 80);
     }

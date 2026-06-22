@@ -42,6 +42,23 @@
   .ob-tip-ok{width:100%}
   .ob-tip-arrow{position:absolute;width:12px;height:12px;background:var(--panel-2);border-left:1px solid var(--line-2);border-top:1px solid var(--line-2);transform:rotate(45deg);top:-7px;left:20px}
   </style>
+  <!-- Meta Pixel Code -->
+  <script>
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '1611471957649385');
+  fbq('track', 'PageView');
+  </script>
+  <noscript><img height="1" width="1" style="display:none"
+  src="https://www.facebook.com/tr?id=1611471957649385&ev=PageView&noscript=1"
+  /></noscript>
+  <!-- End Meta Pixel Code -->
 </head>
 <body>
   <header class="topbar">
@@ -315,6 +332,16 @@
             </div>
             <p class="set-note" id="addrNote" style="margin:6px 0 0"></p>
             <p class="set-note" style="margin:4px 0 0">Cambiando indirizzo il sito viene ripubblicato sul nuovo. Il vecchio indirizzo può restare attivo finché non lo rimuovi da Cloudflare.</p>
+          </div>
+          <div class="set-row" id="customDomainRow">
+            <label>Collega un dominio che possiedi</label>
+            <p class="set-note" style="margin:0 0 8px">Hai già un dominio, tipo <strong>www.tuonome.it</strong>? Collegalo da solo in due passi. Per il dominio <em>senza</em> www usa il concierge qui sotto.</p>
+            <div class="set-control">
+              <input id="cdInput" class="text-input" type="text" placeholder="www.tuonome.it" spellcheck="false" autocapitalize="off" autocomplete="off" />
+              <button id="cdLink" class="btn ghost" type="button">Collega</button>
+            </div>
+            <div id="cdPanel" hidden style="margin-top:10px"></div>
+            <p class="set-note" id="cdMsg" style="margin:6px 0 0"></p>
           </div>
           <div class="set-row" style="margin-bottom:0">
             <label>Dominio ufficiale</label>
