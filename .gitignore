@@ -5,6 +5,7 @@
 !/.gitignore
 !/.env.example
 !/README.md
+!/AGENTS.md
 !/package.json
 !/package-lock.json
 !/tsconfig.json
