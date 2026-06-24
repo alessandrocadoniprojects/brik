@@ -2473,12 +2473,19 @@ function openSiteModal(initialState, ctx) {
 
   function renderError(data) {
     data = data || {};
-    shell('Pubblicazione non riuscita',
+    const plan = !!data.plan; // limite di piano: niente "Riprova" (inutile), serve il pulsante al checkout
+    const actions = plan
+      ? '<button class="btn" data-act="close2">Chiudi</button><button class="btn accent" data-act="plan">Attiva piano</button>'
+      : '<button class="btn" data-act="close2">Chiudi</button><button class="btn accent" data-act="retry">Riprova</button>';
+    shell(plan ? 'Attiva il piano per pubblicare' : 'Pubblicazione non riuscita',
       '<p class="set-note" style="margin:0 0 14px">' + escapeHtml(data.message || 'Si è verificato un errore durante la pubblicazione.') + '</p>' +
       (data.findings ? '<ul class="tiny" style="margin:0 0 14px;padding-left:18px">' + data.findings + '</ul>' : '') +
-      '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="btn" data-act="close2">Chiudi</button><button class="btn accent" data-act="retry">Riprova</button></div>');
+      '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">' + actions + '</div>');
     ov.querySelector('[data-act="close2"]').addEventListener('click', close);
-    ov.querySelector('[data-act="retry"]').addEventListener('click', () => { runPublish(ctx.lastSub); });
+    const retryEl = ov.querySelector('[data-act="retry"]');
+    if (retryEl) retryEl.addEventListener('click', () => { runPublish(ctx.lastSub); });
+    const planEl = ov.querySelector('[data-act="plan"]');
+    if (planEl) planEl.addEventListener('click', startCheckout);
   }
 
   // Rete invariata: stesso endpoint /publish e stesso renderState. Cambia solo la resa (modale a stati).
@@ -2489,6 +2496,7 @@ function openSiteModal(initialState, ctx) {
     if (!data.ok) {
       if (data.error && data.error.code === 'NEEDS_AUTH') { close(); return; }
       if (data.error && data.error.code === 'SITE_BUILDING') { renderError({ message: 'Il sito è ancora in costruzione: riprova fra qualche secondo.' }); return; }
+      if (data.error && data.error.code === 'PLAN_LIMIT_REACHED') { renderError({ message: data.error.message, plan: true }); return; }
       renderError({ message: (data.error && data.error.message) || 'Pubblicazione non riuscita.' });
       return;
     }
