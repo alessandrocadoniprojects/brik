@@ -36,7 +36,7 @@ import { planIntakeQuestions } from '../intake/intakeQuestions.js';
 import { planEditClarification } from '../intake/editClarify.js';
 import { makeBasicSecurityScanner } from '../security/scanner.js';
 import { makeFileSiteStore } from '../project/siteStore.js';
-import { getAccountPlan, setAccountMaxPublished, canPublish } from './accountStore.js';
+import { getAccountPlan, setAccountMaxPublished, canPublish, maxPublishedForSubscription } from './accountStore.js';
 import { summarizeSite } from '../project/site.js';
 import {
   createProject,
@@ -153,10 +153,17 @@ const GUEST_MAXAGE_SEC = 30 * 86_400;
 const ANON_GEN_PER_IP_HOUR = Number(process.env.ANON_GEN_PER_IP_HOUR ?? 5); // throttle generazioni anonime per IP/ora (<=0 = nessuno)
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || '';
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
-const STRIPE_PRICE_LAUNCH = process.env.STRIPE_PRICE_LAUNCH || 'price_1Te460HGRzZVUNFqxjwq45vo'; // 149€ una-tantum
-const STRIPE_PRICE_YEARLY = process.env.STRIPE_PRICE_YEARLY || 'price_1Te47GHGRzZVUNFqkJJLcD4h'; // 49€/anno ricorrente
+// Prezzi per-account (B3): un price ricorrente per tier -> maxPublished.
+const STRIPE_PRICE_BASE = process.env.STRIPE_PRICE_BASE || '';
+const STRIPE_PRICE_PLUS = process.env.STRIPE_PRICE_PLUS || '';
+const STRIPE_PRICE_PRO = process.env.STRIPE_PRICE_PRO || '';
+const PRICE_TO_MAX: Record<string, number> = {
+  ...(STRIPE_PRICE_BASE ? { [STRIPE_PRICE_BASE]: 3 } : {}),
+  ...(STRIPE_PRICE_PLUS ? { [STRIPE_PRICE_PLUS]: 10 } : {}),
+  ...(STRIPE_PRICE_PRO ? { [STRIPE_PRICE_PRO]: 30 } : {}),
+};
 const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET) : null;
-const STRIPE_READY = !!stripe && !!STRIPE_WEBHOOK_SECRET;
+const STRIPE_READY = !!stripe && !!STRIPE_WEBHOOK_SECRET && !!STRIPE_PRICE_BASE;
 
 // --- Meta Conversions API (tracking server-side degli eventi, es. Purchase) ---
 const META_PIXEL_ID = process.env.META_PIXEL_ID || '1611471957649385';
@@ -1520,18 +1527,21 @@ const server = createServer(async (req, res) => {
       try {
         if (event.type === 'checkout.session.completed') {
           const cs = event.data.object as Stripe.Checkout.Session;
-          const siteId = cs.client_reference_id || (cs.metadata && cs.metadata.siteId) || '';
-          if (siteId) await grantEntitlement(siteId);
           const _amt = typeof cs.amount_total === 'number' ? cs.amount_total / 100 : undefined;
           const _em = (cs.customer_details && cs.customer_details.email) || cs.customer_email || '';
           void sendMetaCapi('Purchase', { ...(_amt != null ? { value: _amt } : {}), currency: (cs.currency || 'eur').toUpperCase(), eventId: 'purchase_' + cs.id, ...(_em ? { email: _em } : {}) });
-          console.log('  ✓ stripe: pagamento ricevuto →', siteId || '(siteId mancante)');
-        } else if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
+          console.log('  ✓ stripe: checkout completato ->', _em || '(email mancante)');
+        } else if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
           const sub = event.data.object as Stripe.Subscription;
-          const siteId = (sub.metadata && sub.metadata.siteId) || '';
-          const dead = event.type === 'customer.subscription.deleted' || sub.status === 'canceled' || sub.status === 'unpaid' || sub.status === 'incomplete_expired';
-          if (siteId) { if (dead) await revokeEntitlement(siteId); else await grantEntitlement(siteId); }
-          console.log('  → stripe sub:', event.type, sub.status, siteId);
+          const email = (sub.metadata && sub.metadata.email) || '';
+          const priceId = sub.items?.data?.[0]?.price?.id || '';
+          if (email) {
+            const max = maxPublishedForSubscription({ eventType: event.type, status: sub.status, priceId, priceToMax: PRICE_TO_MAX });
+            setAccountMaxPublished(email, max);
+            console.log('  -> stripe sub:', event.type, sub.status, priceId, '-> max', max, email);
+          } else {
+            console.log('  ! stripe sub senza email in metadata:', event.type, sub.id);
+          }
         } else if (event.type === 'invoice.payment_failed') {
           console.log('  ⚠ stripe: rinnovo fallito (Stripe riproverà)');
         }
@@ -1818,22 +1828,21 @@ const server = createServer(async (req, res) => {
         }
       }
 
-      // Avvia il pagamento (Stripe Checkout): 149€ subito + 49€/anno dal 2° anno (trial 365g).
+      // Avvia il pagamento (Stripe Checkout): abbonamento per-account, 19€/mese -> 3 siti.
       if (action === 'checkout' && method === 'POST') {
         if (!stripe || !STRIPE_READY) return sendJson(res, 503, { ok: false, error: { code: 'STRIPE_OFF', message: 'Pagamenti non configurati.' } });
-        const pr = await getProject(store, id);
-        if (!pr.ok || !pr.value) return sendJson(res, 404, { ok: false, error: { code: 'PROJECT_NOT_FOUND', message: 'Progetto non trovato.' } });
         const ownerEmail = readOwnerEmail(id) || sessionUserOf(req)?.email || '';
+        if (!ownerEmail) return sendJson(res, 400, { ok: false, error: { code: 'NO_ACCOUNT_EMAIL', message: 'Email account non trovata.' } });
         try {
           const session = await stripe.checkout.sessions.create({
             mode: 'subscription',
-            line_items: [{ price: STRIPE_PRICE_LAUNCH, quantity: 1 }, { price: STRIPE_PRICE_YEARLY, quantity: 1 }],
-            subscription_data: { trial_period_days: 365, metadata: { siteId: id } },
+            line_items: [{ price: STRIPE_PRICE_BASE, quantity: 1 }],
+            subscription_data: { metadata: { email: ownerEmail } },
             client_reference_id: id,
             allow_promotion_codes: true,
             success_url: APP_URL + '/?paid=1&site=' + encodeURIComponent(id),
             cancel_url: APP_URL + '/?paid=0&site=' + encodeURIComponent(id),
-            ...(ownerEmail ? { customer_email: ownerEmail } : {}),
+            customer_email: ownerEmail,
           });
           return sendJson(res, 200, { ok: true, url: session.url });
         } catch (e) {
@@ -2205,7 +2214,7 @@ server.listen(PORT, () => {
   console.log('Auth: login via email · ' + (OPERATORS.size ? OPERATORS.size + ' operatore/i' : 'nessun operatore (imposta OPERATOR_EMAILS)') + ' · ' + (AUTH_REQUIRED ? 'enforcement ON (login obbligatorio, siti per utente)' : 'enforcement OFF') + (ANON_TRIAL ? ' · prova-ospite ON (1 generazione + 1 modifica, poi login)' : '') + ' · base ' + APP_URL);
   console.log('Direttore creativo: ' + (DIRECTOR_REVIEW ? 'ON (soglia ' + DIRECTOR_MIN_SCORE + '/10, max 1 rigenerazione)' : 'OFF'));
   console.log('Rigenerazione creativa al publish (finalize): ' + (DIRECTOR_REVIEW && DIRECTOR_FINALIZE ? 'ON' : 'OFF \u2014 publish WYSIWYG, solo scan+deploy'));
-  console.log('Pagamenti: ' + (STRIPE_READY ? 'Stripe attivo (149€ una-tantum + 49€/anno, trial 365g)' : 'Stripe OFF (STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET mancanti)'));
+  console.log('Pagamenti: ' + (STRIPE_READY ? 'Stripe attivo (19€/mese -> 3 siti, per-account)' : 'Stripe OFF (STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET / STRIPE_PRICE_BASE mancanti)'));
 });
 
 // Sweep periodico del trial (solo se Cloudflare e configurato: il lock deploya una pagina di pausa).

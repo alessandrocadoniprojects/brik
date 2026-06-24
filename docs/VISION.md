@@ -19,12 +19,12 @@ Un'agenzia costruisce e gestisce N siti vetrina in una frazione del tempo e del 
 - **Tutto in mano all'agenzia**: nessun login per il cliente finale in v1.
 
 ## Modello di prezzo (orienta le scelte di prodotto)
-- **Unità unica: un sito pubblicato = €9/mese.** Lineare: 3 siti = €27, 50 siti = €450. Margine ovvio per chi rivende.
-- **Contatore unico = "modifiche"** (correzioni/rigenerazioni parziali). Il **build iniziale è gratis e separato**: uno per account in trial, non consuma il budget.
-- **Trial gratis**: nessuna carta, **build iniziale + 10 modifiche**, **0 pubblicazioni**. Basta per costruire un sito e vederne la qualità. Per pubblicare = consegnare al cliente = si paga.
-- **Ogni sito pubblicato sblocca 5 modifiche** per la manutenzione post-pubblicazione (il sito esiste già, nessun nuovo build incluso). Pubblicare (ciò che paga) sblocca modificare (ciò che costa) → si auto-bilancia.
-- **Niente fee di lancio, niente bundle** in v1. Esaurite le modifiche: allarga l'account.
-- Costo interno ~€0,60 a build, modifiche più leggere → margine positivo garantito su ogni sito pubblicato.
+- **Modello per-account a tier (live 2026-06-24).** Abbonamento mensile ricorrente, non lineare: **19€ = 3 siti pubblicati**, 39€ = 10, 79€ = 30. L'unità che si paga è lo *slot di pubblicazione* dell'account (`maxPublished`), non il singolo sito. Tier accesi via env (`STRIPE_PRICE_BASE/PLUS/PRO`); tutti e 3 attivi al lancio.
+- **Build iniziale gratis e separato**: non consuma budget. Genera e modifica sono liberi anche in trial.
+- **Trial gratis**: nessuna carta, **0 pubblicazioni** finché il piano non è attivo. Si costruisce e si valuta la qualità; pubblicare = consegnare al cliente = si paga. Lock del trial dopo **3 giorni** (`TRIAL_DAYS`).
+- **Modifiche illimitate per ora** (`EDIT_CAP=0`): nessun cap sulle correzioni/rigenerazioni. Cap reintroducibile via env solo se i dati mostrano abuso — scelta strategica, non architetturale.
+- **Disdetta**: i siti già pubblicati restano online (il gate scatta solo alla pubblicazione di un nuovo slot); l'account non può pubblicarne di nuovi finché non riattiva.
+- Unit economics: build ~€0,60, modifica ~€0,02, hosting ~€0 → margine dominante. Strategia: entrare cheap per diventare lo strumento-status del freelance, poi alzare i prezzi grandfatherando gli early adopter.
 
 ## Non-goals (filtro anti-scope-creep)
 - **No** editor visuale tipo Duda.
