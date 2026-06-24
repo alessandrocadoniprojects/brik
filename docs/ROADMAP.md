@@ -33,3 +33,12 @@ Membri team, login/account cliente finale, analytics per cliente, e-commerce, wh
 
 ---
 *Parametri tarabili: numero di modifiche (trial 10, sblocco 5 per sito pubblicato), build iniziale gratis, e prezzo (€9) sono valori di partenza, non vincoli architetturali.*
+
+
+## Integrazioni e capacità sito (verificato 2026-06-23, post-lancio immediato)
+
+- **B10 — Integrazioni: attivazione reale.** Verificato sul codice. REALI: email/form (Resend, POST a api.resend.com), Meta Pixel + Conversions API server-side, WhatsApp CTA, Google Maps + schema.org, video facade YouTube. DICHIARATI MA NON INIETTATI: `metaPixel` script client, `googleAds`, `analytics` — `legalProfile.ts:312-317` lo dice esplicitamente (brik li mette in policy ma non inserisce lo script). Blocco: iniettare davvero gli script dichiarati, dietro consenso. Gap aspettativa-realtà da chiudere subito dopo il lancio.
+- **B11 — Multilingua IT/EN.** Confermato ASSENTE (zero i18n/hreflang nel codice). Entrambi i siti del designer di riferimento sono IT/EN. Richiesta ricorrente clienti seri. Blocco medio. Post-lancio.
+- **B12 — Consent banner GDPR (accoppiato a B10).** `cookieMode` esiste (4 livelli: technical-only/basic-analytics/full-analytics/marketing-pixel) ma `legalProfile.ts:317` segnala che oggi NON c'è il blocco-degli-script-prima-del-consenso. Necessario appena si attiva B10: se inietti pixel/ads servi il banner che li blocca prima dell'accettazione. Post-lancio, insieme a B10.
+
+> Nota motion/animazioni: la fedeltà ai design dei designer (incluso il movimento) è affrontata nel lavoro marketplace come fingerprint + kit di sezioni del designer + generatore che compone dal kit, non come vocabolario di token globale. Vedi lavoro design-intake/extractor dedicato.
