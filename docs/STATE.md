@@ -9,12 +9,12 @@ B1 ✓ → B2 ✓ (live) → **B3 ✓ lato codice** (gate REVIEWER PASS) → **L
 **B3 — Billing Stripe per-account.** Stripe migrato da per-sito a per-account: price ricorrenti per tier → `maxPublished` (19€→3, 39€→10, 79€→30). Webhook `customer.subscription.*` alimenta il gate B2. Suite 312/312 verde, typecheck ZERO, gate REVIEWER PASS. Spec: `docs/blocks/B3_stripe_billing.md`.
 
 ## Decisione di scope e2e B3 (2026-06-24)
-- **e2e RIDOTTO sul solo ponte Stripe.** Si verifica: `stripe trigger customer.subscription.created` → `data/accounts/<email>.json` = `maxPublished 3`; `trigger ...deleted` → torna `0`. Il **gate del 4° publish NON si rifà e2e**: già coperto dagli unit B2 (3 build Playwright reali sarebbero costose e ridondanti).
-- **Prerequisito: micro-blocco `block/data-dir-env`** — `DATA_DIR` configurabile via env con fallback al path attuale, così lo staging isola i dati senza worktree-hack e ogni test futuro è pulito. Passa dal gate REVIEWER prima di essere chiuso.
+- **e2e RIDOTTO sul solo ponte Stripe.** Si verifica: evento `customer.subscription.created` (con `metadata.email` + price BASE) → `data/accounts/<email>.json` = `maxPublished 3`; `...deleted` → torna `0`. Il **gate del 4° publish NON si rifà e2e**: già coperto dagli unit B2 (3 build Playwright reali sarebbero costose e ridondanti).
+- **Niente micro-blocco DATA_DIR** (scartato per velocità). L'isolamento dei dati si fa con un **git worktree** in `/opt/brik-staging` (HEAD detached sul commit B3): lì `../../data/` risolve in `/opt/brik-staging/data/`, vuota e separata dai dati live. B3 resta intatto, nessuna modifica a `src/`.
+- Stripe CLI installata (`1.43.1`). Niente `stripe login` interattivo: la CLI usa `--api-key sk_test_…` direttamente.
 
 ## APERTO ORA (cosa manca prima del lancio)
-1. **`block/data-dir-env`** (prerequisito e2e): `DATA_DIR ?? path attuale` in `accountStore.ts` + `server.ts`. → da implementare, poi gate REVIEWER.
-2. **e2e Stripe test-mode RIDOTTO** (Fase 3): ambiente STAGING isolato — **NON si testa su `/opt/brik`** (chiavi `.env` prod = **LIVE**, zero trigger/checkout lì). Serve: Stripe CLI (⬅ installazione OK da Ale, in corso), chiavi `sk_test_`, 3 price ricreati in test-mode (li crea Ale da Dashboard), `.env.staging` con `DATA_DIR` isolata + `PORT=4322`/`APP_URL`. Processo a mano (non systemd) + `stripe listen --forward-to localhost:4322/api/stripe/webhook`.
+1. **e2e Stripe test-mode RIDOTTO** (Fase 3): staging via **worktree** `/opt/brik-staging` — **NON si testa su `/opt/brik`** (chiavi `.env` prod = **LIVE**, zero trigger/checkout lì). Ale crea da Dashboard test-mode: `sk_test_` + 3 price ricorrenti (BASE/PLUS/PRO). Io: worktree, `.env.staging` (chiavi test + price + `PORT=4322`/`APP_URL`), avvio server staging a mano, `stripe listen --forward-to localhost:4322/api/stripe/webhook`, creo subscription test via API → verifico il file account.
 2. **Backup `.bak-b3` da rimuovere** dopo conferma e2e: `src/server/accountStore.ts.bak-b3`, `src/server/server.ts.bak-b3`, `docs/VISION.md.bak-b3`. (Residui vecchi `.bak-login-project-*` e `.bak-pizzerie-*`: valutarli a parte, non in questo giro.)
 3. **Due PR aperte da mergiare** (vedi sotto).
 
