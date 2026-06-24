@@ -36,6 +36,7 @@ import { planIntakeQuestions } from '../intake/intakeQuestions.js';
 import { planEditClarification } from '../intake/editClarify.js';
 import { makeBasicSecurityScanner } from '../security/scanner.js';
 import { makeFileSiteStore } from '../project/siteStore.js';
+import { getAccountPlan, setAccountMaxPublished, canPublish } from './accountStore.js';
 import { summarizeSite } from '../project/site.js';
 import {
   createProject,
@@ -800,6 +801,17 @@ function listProjectIds(): string[] {
     .map((f) => f.slice(0, -'.json'.length));
 }
 
+/** Conta i siti gia 'published' di un owner (per il gate di piano B2). */
+async function publishedCountForOwner(ownerEmail: string): Promise<number> {
+  const e=(ownerEmail||'').toLowerCase().trim(); if(!e) return 0;
+  let n=0;
+  for (const pid of listProjectIds()) {
+    if ((readOwnerEmail(pid)||'').toLowerCase()!==e) continue;
+    try { const pr=await getProject(store, pid); if (pr.ok && pr.value && pr.value.status==='published') n++; } catch { /* best-effort */ }
+  }
+  return n;
+}
+
 // --- Stato dei job di generazione asincroni (create) -------------------------
 // La generazione non viene piu attesa dentro la richiesta HTTP: parte in background
 // e il client fa polling su GET /api/projects/{id}. Lo stato vive in memoria E su
@@ -1183,6 +1195,21 @@ const server = createServer(async (req, res) => {
       const value = body.value === true || body.value === 1 || body.value === '1';
       if (value) await addFreeEmail(email); else await removeFreeEmail(email);
       return sendJson(res, 200, { ok: true, email, free: value });
+    }
+
+    // B2: imposta il piano (maxPublished siti) di un ACCOUNT per email — solo operatori.
+    // A regime lo scrivera il webhook Stripe (B3); per ora attivazione manuale.
+    if (path === '/api/admin/plan' && method === 'POST') {
+      const me2 = sessionUserOf(req);
+      if (!me2 || !me2.isOperator) return sendJson(res, 403, { ok: false, error: { code: 'FORBIDDEN', message: 'Solo operatori.' } });
+      const body = await readJsonBody(req);
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+      if (!email || !EMAIL_RE.test(email)) return sendJson(res, 400, { ok: false, error: { code: 'BAD_EMAIL', message: 'Email non valida.' } });
+      const maxPublished = Number(body.maxPublished);
+      if (!Number.isFinite(maxPublished) || maxPublished < 0) return sendJson(res, 400, { ok: false, error: { code: 'BAD_PLAN', message: 'maxPublished deve essere un numero >= 0.' } });
+      const plan = setAccountMaxPublished(email, maxPublished);
+      console.log('  \u2713 plan_set: ' + email + ' \u00b7 maxPublished ' + plan.maxPublished);
+      return sendJson(res, 200, { ok: true, email, plan });
     }
 
     // Elenco utenti iscritti + stato (operatori).
@@ -2056,6 +2083,17 @@ const server = createServer(async (req, res) => {
         // Un sito in pausa non si ripubblica dal flusso normale: va riattivato (unlock).
         if (pre.value.status === 'locked' && !pre.value.entitled) {
           return sendJson(res, 400, { ok: false, error: { code: 'SITE_LOCKED', message: 'Il sito è in pausa. Riattivalo prima di ripubblicare.' } });
+        }
+        // B2 gate: piano per-account. Se l'owner ha gia raggiunto maxPublished siti
+        // pubblicati E questo sito non e entitled (override operatore) -> blocca.
+        // Un sito gia 'published' che si ri-pubblica non conta come nuovo (e gia nel conteggio).
+        {
+          const plan = getAccountPlan(email || '');
+          const alreadyPublished = await publishedCountForOwner(email || '');
+          if (!canPublish({ entitled: !!pre.value.entitled, status: pre.value.status, publishedCount: alreadyPublished, maxPublished: plan.maxPublished })) {
+            console.log('  ⛔ publish_blocked_plan_limit: ' + id + ' · owner ' + (email||'?') + ' · ' + alreadyPublished + '/' + plan.maxPublished);
+            return sendJson(res, 402, { ok: false, error: { code: 'PLAN_LIMIT_REACHED', message: 'Hai raggiunto il numero di siti pubblicabili del tuo piano. Attiva o aggiorna il piano per pubblicare altri siti.' } });
+          }
         }
         // Fast Preview / WYSIWYG: se ci sono pagine interne ancora pending, le genero ORA in
         // parallelo. Se una route fallisce o va in timeout uso una pagina fallback; il preflight
