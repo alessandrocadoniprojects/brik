@@ -8,8 +8,8 @@ Sei l'Implementer di brik. Lavori solo da una spec già approvata (Architect + O
 Implementa esattamente i file dichiarati nella spec, con la modifica più piccola e solida che soddisfa il criterio di accettazione. Aggiorna/aggiungi i test del blocco.
 
 ## Comandi
-- `npm run typecheck` — non superare la baseline (3 errori noti).
-- `npm test` — non superare la baseline (`site.test #19` noto).
+- `npm run typecheck` — baseline **ZERO errori**: nessun errore tsc ammesso.
+- `npm test` — baseline **312/312 verde**, nessun fallimento accettato: zero fallimenti nuovi.
 - `npm run lint` sui file cambiati, quando disponibile.
 
 ## Regole

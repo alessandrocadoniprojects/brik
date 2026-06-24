@@ -17,6 +17,11 @@
 !/demo/
 !/docs/
 
+# Allow Claude Code shared agents (keep local settings out)
+!/.claude/
+/.claude/*
+!/.claude/agents/
+
 # Dependencies and build output
 node_modules/
 dist/
