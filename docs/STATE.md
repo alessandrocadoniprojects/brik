@@ -14,9 +14,10 @@ B1 ✓ → B2 ✓ (live) → **B3 ✓ lato codice** (gate REVIEWER PASS) → **L
 - Stripe CLI installata (`1.43.1`). Niente `stripe login` interattivo: la CLI usa `--api-key sk_test_…` direttamente.
 
 ## APERTO ORA (cosa manca prima del lancio)
-1. **e2e Stripe test-mode RIDOTTO** (Fase 3): staging via **worktree** `/opt/brik-staging` — **NON si testa su `/opt/brik`** (chiavi `.env` prod = **LIVE**, zero trigger/checkout lì). Ale crea da Dashboard test-mode: `sk_test_` + 3 price ricorrenti (BASE/PLUS/PRO). Io: worktree, `.env.staging` (chiavi test + price + `PORT=4322`/`APP_URL`), avvio server staging a mano, `stripe listen --forward-to localhost:4322/api/stripe/webhook`, creo subscription test via API → verifico il file account.
-2. **Backup `.bak-b3` da rimuovere** dopo conferma e2e: `src/server/accountStore.ts.bak-b3`, `src/server/server.ts.bak-b3`, `docs/VISION.md.bak-b3`. (Residui vecchi `.bak-login-project-*` e `.bak-pizzerie-*`: valutarli a parte, non in questo giro.)
-3. **Due PR aperte da mergiare** (vedi sotto).
+1. **e2e B3 ridotto via ACQUISTO REALE** (Fase 3, in corso): niente staging/chiavi test (scartato). Ale fa un checkout reale sul suo account in prod (la prod gira già B3, confermato dal log avvio 18:11 `19€/mese -> 3 siti, per-account`) → io verifico `data/accounts/<email>.json` = `maxPublished 3`; poi Ale rimborsa+cancella da Dashboard → evento `deleted` → verifico torna a `0`. Stripe CLI `1.43.1` installata (non più necessaria per questo approccio).
+2. **Landing pubblica: testi pricing da aggiornare** (blocco pre-lancio): la landing mostra ancora i prezzi VECCHI (149€ una-tantum + 49€/anno, confronto agenzia). Il billing è già 19€/3 siti per-account, ma il TESTO della pagina no. → aggiornare i testi al pricing 19€/3 siti (39€/10, 79€/30) prima del lancio. Codice billing OK, è solo copy della pagina.
+3. **Backup `.bak-b3` da rimuovere** dopo conferma e2e: `src/server/accountStore.ts.bak-b3`, `src/server/server.ts.bak-b3`, `docs/VISION.md.bak-b3`. (Residui vecchi `.bak-login-project-*` e `.bak-pizzerie-*`: valutarli a parte, non in questo giro.)
+4. **Due PR aperte da mergiare** (vedi sotto).
 
 ## Branch aperti, non ancora mergiati (main è la verità, qui c'è cosa manca da PR-are)
 - **`block/B3-stripe`** — il billing per-account: `src/server/accountStore.ts`, `src/server/server.ts`, `test/stripeWebhook.test.ts`, `docs/ROADMAP.md`, `docs/VISION.md`, `docs/blocks/B3_stripe_billing.md`. → PR di B3.
