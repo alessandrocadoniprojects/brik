@@ -10,6 +10,7 @@ B1 ✓ → B2 ✓ (live) → **B3 ✓ lato codice** (gate REVIEWER PASS) → **L
 
 ## APERTO ORA (cosa manca prima del lancio)
 1. **e2e Stripe test-mode** (Fase 3, non ancora fatto): un checkout reale in test-mode deve scrivere `data/accounts/<email>.json` con `maxPublished=3`, e il **4° publish** deve dare `PLAN_LIMIT_REACHED`. Finché non è verde, B3 non è chiuso end-to-end.
+   - ⚠️ **L'e2e richiede un ambiente di STAGING isolato — NON si testa su `/opt/brik`.** Le chiavi nel `.env` di prod sono **LIVE**: zero `stripe trigger`/checkout di prova contro di esse. Vincolo tecnico chiave: la dir dati è **hardcoded** (`new URL('../../data/...', import.meta.url)` — `accountStore.ts:7`, `server.ts:92-99`), NON configurabile via env → isolare i dati richiede un **checkout/worktree separato** del repo (così `../../data/` risolve in un'altra dir); un `--env-file` diverso da solo NON basta. `PORT`/`APP_URL` invece sono già da env. Manca: Stripe CLI (non installata), chiavi `sk_test_`, 3 price ricreati in test-mode, `.env.staging`.
 2. **Backup `.bak-b3` da rimuovere** dopo conferma e2e: `src/server/accountStore.ts.bak-b3`, `src/server/server.ts.bak-b3`, `docs/VISION.md.bak-b3`. (Residui vecchi `.bak-login-project-*` e `.bak-pizzerie-*`: valutarli a parte, non in questo giro.)
 3. **Due PR aperte da mergiare** (vedi sotto).
 
