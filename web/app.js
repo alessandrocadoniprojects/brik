@@ -356,6 +356,7 @@ function renderGating(st) {
   const statusLabel = st.status === 'preview' ? 'bozza' : st.status === 'approved' ? 'approvato' : st.status === 'locked' ? 'in pausa' : 'pubblicato';
   let trial = '';
   if (st.entitled) trial = 'attivo · nessun limite';
+  else if (st.planActive) trial = 'piano attivo';
   else if (st.status !== 'locked') {
     const parts = [];
     if (st.trialPhase === 'trial' && st.trialDaysLeft != null) parts.push(st.trialDaysLeft + 'g di prova');
@@ -1716,7 +1717,7 @@ function updatePlanChip(st) {
   _ensurePlanChip();
   if (!_planChip) return;
   let txt = 'Piani e prezzi';
-  if (st && st.entitled) txt = '\u2713 Piano attivo';
+  if (st && (st.entitled || st.planActive)) txt = '\u2713 Piano attivo';
   else if (st && st.status === 'locked') txt = '\u23f8 In pausa \u00b7 riattiva';
   else if (st && st.trialPhase === 'trial' && st.trialDaysLeft != null) txt = '\ud83c\udf81 Prova gratuita \u00b7 ' + st.trialDaysLeft + 'g rimast' + (st.trialDaysLeft === 1 ? 'o' : 'i');
   _planChip.innerHTML = txt + ' <span style="opacity:.55;">\u24d8</span>';
