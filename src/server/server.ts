@@ -648,6 +648,8 @@ function stateView(state: SiteState) {
     routes: state.routes.map((r) => ({ route: r.route, label: r.label })),
     pendingRoutes: pendingRoutesOf(state),
     entitled: !!state.entitled,
+    // Piano account attivo (Stripe): il frontend lo usa per non mostrare il banner trial ai paganti.
+    planActive: getAccountPlan(readOwnerEmail(state.id) || '').maxPublished > 0,
     trialEndsAt: state.trialEndsAt ?? null,
     customDomain: state.customDomain ?? null,
     trialPhase: tp.phase,
