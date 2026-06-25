@@ -2474,12 +2474,31 @@ function openSiteModal(initialState, ctx) {
 
   function renderError(data) {
     data = data || {};
-    const plan = !!data.plan; // limite di piano: niente "Riprova" (inutile), serve il pulsante al checkout
-    const actions = plan
-      ? '<button class="btn" data-act="close2">Chiudi</button><button class="btn accent" data-act="plan">Attiva piano</button>'
-      : '<button class="btn" data-act="close2">Chiudi</button><button class="btn accent" data-act="retry">Riprova</button>';
-    shell(plan ? 'Attiva il piano per pubblicare' : 'Pubblicazione non riuscita',
-      '<p class="set-note" style="margin:0 0 14px">' + escapeHtml(data.message || 'Si è verificato un errore durante la pubblicazione.') + '</p>' +
+    const plan = !!data.plan;          // errore di limite-piano al publish
+    const planActive = !!data.planActive; // l'account ha già un piano attivo
+    const planNext = data.planNext;    // { sites: N } se c'è un tier sopra; null se al massimo
+    let title, actions;
+    let msg = data.message || 'Si è verificato un errore durante la pubblicazione.';
+    if (plan && planActive && planNext && planNext.sites) {
+      // pagante al limite → propone l'upgrade al tier superiore
+      title = 'Passa al piano superiore';
+      msg = 'Hai raggiunto il limite del tuo piano. Passa a ' + planNext.sites + ' siti pubblicati per continuare.';
+      actions = '<button class="btn" data-act="close2">Chiudi</button><button class="btn accent" data-act="upgrade">Passa a ' + planNext.sites + ' siti</button>';
+    } else if (plan && planActive) {
+      // pagante già al tier massimo
+      title = 'Sei al piano massimo';
+      msg = 'Hai raggiunto il massimo dei siti pubblicabili (30). Scrivici a ciao@thebrik.it per esigenze maggiori.';
+      actions = '<button class="btn" data-act="close2">Chiudi</button>';
+    } else if (plan) {
+      // nessun piano attivo → attiva (checkout BASE)
+      title = 'Attiva il piano per pubblicare';
+      actions = '<button class="btn" data-act="close2">Chiudi</button><button class="btn accent" data-act="plan">Attiva piano</button>';
+    } else {
+      title = 'Pubblicazione non riuscita';
+      actions = '<button class="btn" data-act="close2">Chiudi</button><button class="btn accent" data-act="retry">Riprova</button>';
+    }
+    shell(title,
+      '<p class="set-note" style="margin:0 0 14px">' + escapeHtml(msg) + '</p>' +
       (data.findings ? '<ul class="tiny" style="margin:0 0 14px;padding-left:18px">' + data.findings + '</ul>' : '') +
       '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">' + actions + '</div>');
     ov.querySelector('[data-act="close2"]').addEventListener('click', close);
@@ -2487,6 +2506,19 @@ function openSiteModal(initialState, ctx) {
     if (retryEl) retryEl.addEventListener('click', () => { runPublish(ctx.lastSub); });
     const planEl = ov.querySelector('[data-act="plan"]');
     if (planEl) planEl.addEventListener('click', startCheckout);
+    const upEl = ov.querySelector('[data-act="upgrade"]');
+    if (upEl) upEl.addEventListener('click', async () => {
+      upEl.disabled = true; upEl.textContent = 'Aggiorno il piano…';
+      try {
+        const r = await api('POST', '/api/projects/' + encodeURIComponent(currentId) + '/upgrade');
+        if (r && r.ok) { close(); runPublish(ctx.lastSub); return; }
+        upEl.disabled = false; upEl.textContent = 'Passa a ' + (planNext && planNext.sites) + ' siti';
+        addMsg('bot', '<p>Upgrade non riuscito.</p><p class="tiny">' + escapeHtml((r && r.error && r.error.message) || '') + '</p>', 'err');
+      } catch (e) {
+        upEl.disabled = false; upEl.textContent = 'Passa a ' + (planNext && planNext.sites) + ' siti';
+        addMsg('bot', "<p>Errore nell'upgrade del piano.</p>", 'err');
+      }
+    });
   }
 
   // Rete invariata: stesso endpoint /publish e stesso renderState. Cambia solo la resa (modale a stati).
@@ -2497,7 +2529,7 @@ function openSiteModal(initialState, ctx) {
     if (!data.ok) {
       if (data.error && data.error.code === 'NEEDS_AUTH') { close(); return; }
       if (data.error && data.error.code === 'SITE_BUILDING') { renderError({ message: 'Il sito è ancora in costruzione: riprova fra qualche secondo.' }); return; }
-      if (data.error && data.error.code === 'PLAN_LIMIT_REACHED') { renderError({ message: data.error.message, plan: true }); return; }
+      if (data.error && data.error.code === 'PLAN_LIMIT_REACHED') { renderError({ message: data.error.message, plan: true, planActive: data.error.planActive, planNext: data.error.planNext }); return; }
       renderError({ message: (data.error && data.error.message) || 'Pubblicazione non riuscita.' });
       return;
     }
