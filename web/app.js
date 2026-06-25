@@ -1676,27 +1676,69 @@ function askPizzeriaVertical(questions, onComplete) {
   step();
 }
 
+// Stato piano pi\u00f9 recente (impostato da updatePlanChip), per alimentare il pannello.
+let _lastPlanState = null;
+
 function _showPlansPanel() {
+  const st = _lastPlanState || {};
+  const maxPub = Number(st.accountMaxPublished || 0);
+  const used = projectList.filter((p) => p && p.status === 'published').length;
+  const TIERS = [{ name: 'Base', sites: 3, price: '19\u20ac' }, { name: 'Plus', sites: 10, price: '39\u20ac' }, { name: 'Pro', sites: 30, price: '79\u20ac' }];
+  const hasPlan = maxPub > 0;
+  const next = TIERS.find((t) => t.sites > maxPub) || null;
+  const curName = (TIERS.find((t) => t.sites === maxPub) || {}).name || (maxPub + ' siti');
+  const hasSite = !!currentId;
+
+  const tiersHtml = TIERS.map((t) => {
+    const isCur = hasPlan && t.sites === maxPub;
+    return '<div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;' + (isCur ? 'font-weight:700;color:#1c7a4a;' : '') + '"><span>' + (isCur ? '\u2713 ' : '') + '<strong>' + t.name + '</strong> \u00b7 ' + t.sites + ' siti</span><span style="font-weight:700;">' + t.price + '/mese</span></div>';
+  }).join('');
+
+  const headHtml = hasPlan
+    ? '<div style="font-size:14px;margin-bottom:10px;padding:10px 12px;border-radius:10px;background:#e3f6ec;color:#0f5a34;"><strong>Piano attuale: ' + curName + '</strong> \u00b7 ' + used + '/' + maxPub + ' siti pubblicati</div>'
+    : '<div style="font-size:13.5px;color:#555;line-height:1.5;margin-bottom:10px;">Prova gratuita \u00b7 nessun piano attivo. <strong>3 giorni</strong> per costruire e valutare; per pubblicare attiva un piano.</div>';
+
+  let actionHtml = '';
+  if (hasSite && !hasPlan) {
+    actionHtml = '<button id="planAction" type="button" data-act="checkout" style="width:100%;border:0;border-radius:10px;padding:12px;font-size:15px;font-weight:700;background:#5b5bf0;color:#fff;cursor:pointer;">Attiva il piano \u00b7 19\u20ac/mese</button>';
+  } else if (hasSite && hasPlan && next) {
+    actionHtml = '<button id="planAction" type="button" data-act="upgrade" style="width:100%;border:0;border-radius:10px;padding:12px;font-size:15px;font-weight:700;background:#5b5bf0;color:#fff;cursor:pointer;">Passa a ' + next.sites + ' siti \u00b7 ' + next.price + '/mese</button>';
+  } else if (hasPlan && !next) {
+    actionHtml = '<div style="font-size:13px;color:#555;text-align:center;">Sei al piano massimo (30 siti). Scrivici a <a href="mailto:ciao@thebrik.it">ciao@thebrik.it</a> per esigenze maggiori.</div>';
+  }
+
   const ov = document.createElement('div');
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10001;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow:auto;';
-  const hasSite = !!currentId;
   ov.innerHTML = '<div role="dialog" aria-modal="true" style="background:#fff;color:#111;max-width:460px;width:100%;border-radius:16px;padding:20px 22px 18px;box-shadow:0 24px 70px rgba(0,0,0,.4);">'
     + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><strong style="font-size:18px;">Piani e prezzi</strong><button id="plansClose" type="button" style="border:0;background:#eee;border-radius:8px;padding:6px 11px;cursor:pointer;font-size:15px;">\u2715</button></div>'
+    + headHtml
     + '<div style="border:1px solid #e6e6ee;border-radius:12px;padding:14px;margin-bottom:12px;">'
-    +   '<div style="font-size:15px;font-weight:700;margin-bottom:8px;">Abbonamento mensile \u00b7 paghi solo per pubblicare</div>'
-    +   '<div style="display:flex;justify-content:space-between;font-size:14px;padding:4px 0;"><span><strong>Base</strong> \u00b7 3 siti</span><span style="font-weight:700;">19\u20ac/mese</span></div>'
-    +   '<div style="display:flex;justify-content:space-between;font-size:14px;padding:4px 0;"><span><strong>Plus</strong> \u00b7 10 siti</span><span style="font-weight:700;">39\u20ac/mese</span></div>'
-    +   '<div style="display:flex;justify-content:space-between;font-size:14px;padding:4px 0;"><span><strong>Pro</strong> \u00b7 30 siti</span><span style="font-weight:700;">79\u20ac/mese</span></div>'
+    +   '<div style="font-size:14px;font-weight:700;margin-bottom:6px;">Abbonamento mensile \u00b7 paghi solo per pubblicare</div>'
+    +   tiersHtml
     +   '<div style="font-size:13px;color:#555;margin-top:8px;">Generare e modificare i siti \u00e8 gratis e illimitato.</div>'
     + '</div>'
-    + '<div style="font-size:13.5px;color:#555;line-height:1.5;margin-bottom:14px;">Hai <strong>3 giorni di prova</strong> dalla creazione. Allo scadere, se non attivi un piano, il sito va <strong>in pausa</strong>: resta salvato ma non pi\u00f9 modificabile finch\u00e9 non passi a un piano.</div>'
-    + (hasSite ? '<button id="plansCheckout" type="button" style="width:100%;border:0;border-radius:10px;padding:12px;font-size:15px;font-weight:700;background:#5b5bf0;color:#fff;cursor:pointer;">Attiva il piano \u00b7 19\u20ac/mese</button>' : '')
+    + actionHtml
     + '</div>';
   document.body.appendChild(ov);
   const close = () => ov.remove();
   const cb = ov.querySelector('#plansClose'); if (cb) cb.onclick = close;
-  const co = ov.querySelector('#plansCheckout'); if (co) co.onclick = () => { close(); startCheckout(); };
   ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+
+  const act = ov.querySelector('#planAction');
+  if (act) act.onclick = async () => {
+    if (act.dataset.act === 'checkout') { close(); startCheckout(); return; }
+    if (!currentId) return;
+    act.disabled = true; act.textContent = 'Aggiorno il piano\u2026';
+    try {
+      const r = await api('POST', '/api/projects/' + encodeURIComponent(currentId) + '/upgrade');
+      if (r && r.ok) { close(); addMsg('bot', '<p>Piano aggiornato a <strong>' + (r.nextMax || (next && next.sites)) + ' siti</strong>.</p>', 'ok-note'); return; }
+      act.disabled = false; act.textContent = 'Passa a ' + next.sites + ' siti \u00b7 ' + next.price + '/mese';
+      addMsg('bot', '<p>Upgrade non riuscito.</p><p class="tiny">' + escapeHtml((r && r.error && r.error.message) || '') + '</p>', 'err');
+    } catch (e) {
+      act.disabled = false; act.textContent = 'Passa a ' + next.sites + ' siti \u00b7 ' + next.price + '/mese';
+      addMsg('bot', "<p>Errore nell'upgrade del piano.</p>", 'err');
+    }
+  };
 }
 
 // Chip "Piani" discreto e sempre visibile in cima alla chat: informa della prova senza bloccare.
@@ -1709,18 +1751,19 @@ function _ensurePlanChip() {
   _planChip.type = 'button';
   _planChip.id = 'planChip';
   _planChip.hidden = true;
-  _planChip.style.cssText = 'display:block;width:100%;flex:0 0 auto;border:0;border-bottom:1px solid var(--line-2,#e2e2ec);background:var(--panel-2,#f4f4f8);color:inherit;padding:7px 12px;font-size:12.5px;line-height:1.2;cursor:pointer;text-align:center;';
+  _planChip.style.cssText = 'display:block;width:fit-content;max-width:92%;margin:6px auto;flex:0 0 auto;border:1px solid var(--line-2,#e2e2ec);border-radius:999px;background:var(--panel-2,#f4f4f8);color:inherit;padding:3px 11px;font-size:12px;line-height:1.3;cursor:pointer;opacity:.85;';
   _planChip.onclick = _showPlansPanel;
   host.insertBefore(_planChip, host.firstChild);
 }
 function updatePlanChip(st) {
+  _lastPlanState = st || _lastPlanState;
   _ensurePlanChip();
   if (!_planChip) return;
   let txt = 'Piani e prezzi';
-  if (st && (st.entitled || st.planActive)) txt = '\u2713 Piano attivo';
-  else if (st && st.status === 'locked') txt = '\u23f8 In pausa \u00b7 riattiva';
-  else if (st && st.trialPhase === 'trial' && st.trialDaysLeft != null) txt = '\ud83c\udf81 Prova gratuita \u00b7 ' + st.trialDaysLeft + 'g rimast' + (st.trialDaysLeft === 1 ? 'o' : 'i');
-  _planChip.innerHTML = txt + ' <span style="opacity:.55;">\u24d8</span>';
+  if (st && (st.entitled || st.planActive)) txt = 'Piano attivo';
+  else if (st && st.status === 'locked') txt = 'In pausa \u00b7 riattiva';
+  else if (st && st.trialPhase === 'trial' && st.trialDaysLeft != null) txt = 'Prova \u00b7 ' + st.trialDaysLeft + 'g';
+  _planChip.innerHTML = '<span style="opacity:.6;margin-right:5px;">\u24d8</span>' + txt;
   _planChip.hidden = false;
 }
 

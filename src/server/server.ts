@@ -645,6 +645,7 @@ function generatorWith(userPhotos: readonly { id: string; alt?: string; isNew?: 
 /** Vista compatta dello stato per il frontend. */
 function stateView(state: SiteState) {
   const tp = trialPhase(state);
+  const ownerPlan = getAccountPlan(readOwnerEmail(state.id) || '');
   return {
     id: state.id,
     status: state.status,
@@ -654,8 +655,9 @@ function stateView(state: SiteState) {
     routes: state.routes.map((r) => ({ route: r.route, label: r.label })),
     pendingRoutes: pendingRoutesOf(state),
     entitled: !!state.entitled,
-    // Piano account attivo (Stripe): il frontend lo usa per non mostrare il banner trial ai paganti.
-    planActive: getAccountPlan(readOwnerEmail(state.id) || '').maxPublished > 0,
+    // Piano account (Stripe): planActive nasconde il trial ai paganti; accountMaxPublished alimenta il pannello piani.
+    planActive: ownerPlan.maxPublished > 0,
+    accountMaxPublished: ownerPlan.maxPublished,
     trialEndsAt: state.trialEndsAt ?? null,
     customDomain: state.customDomain ?? null,
     trialPhase: tp.phase,
