@@ -36,7 +36,7 @@ import { planIntakeQuestions } from '../intake/intakeQuestions.js';
 import { planEditClarification } from '../intake/editClarify.js';
 import { makeBasicSecurityScanner } from '../security/scanner.js';
 import { makeFileSiteStore } from '../project/siteStore.js';
-import { getAccountPlan, setAccountMaxPublished, canPublish, maxPublishedForSubscription } from './accountStore.js';
+import { getAccountPlan, setAccountMaxPublished, setAccountSubscription, canPublish, maxPublishedForSubscription, nextTier } from './accountStore.js';
 import { summarizeSite } from '../project/site.js';
 import {
   createProject,
@@ -162,6 +162,12 @@ const PRICE_TO_MAX: Record<string, number> = {
   ...(STRIPE_PRICE_PLUS ? { [STRIPE_PRICE_PLUS]: 10 } : {}),
   ...(STRIPE_PRICE_PRO ? { [STRIPE_PRICE_PRO]: 30 } : {}),
 };
+// Scala tier per l'upgrade self-service (ordinata per max crescente). Solo i tier con env valorizzata.
+const TIER_LADDER: { price: string; max: number }[] = [
+  ...(STRIPE_PRICE_BASE ? [{ price: STRIPE_PRICE_BASE, max: 3 }] : []),
+  ...(STRIPE_PRICE_PLUS ? [{ price: STRIPE_PRICE_PLUS, max: 10 }] : []),
+  ...(STRIPE_PRICE_PRO ? [{ price: STRIPE_PRICE_PRO, max: 30 }] : []),
+];
 const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET) : null;
 const STRIPE_READY = !!stripe && !!STRIPE_WEBHOOK_SECRET && !!STRIPE_PRICE_BASE;
 
@@ -1537,7 +1543,8 @@ const server = createServer(async (req, res) => {
           const priceId = sub.items?.data?.[0]?.price?.id || '';
           if (email) {
             const max = maxPublishedForSubscription({ eventType: event.type, status: sub.status, priceId, priceToMax: PRICE_TO_MAX });
-            setAccountMaxPublished(email, max);
+            const customerId = typeof sub.customer === 'string' ? sub.customer : (sub.customer?.id || undefined);
+            setAccountSubscription(email, { maxPublished: max, subscriptionId: sub.id, ...(customerId ? { customerId } : {}), ...(priceId ? { priceId } : {}) });
             console.log('  -> stripe sub:', event.type, sub.status, priceId, '-> max', max, email);
           } else {
             console.log('  ! stripe sub senza email in metadata:', event.type, sub.id);
@@ -1851,6 +1858,44 @@ const server = createServer(async (req, res) => {
         }
       }
 
+      // Upgrade self-service: porta la subscription esistente al tier superiore (prorata Stripe).
+      if (action === 'upgrade' && method === 'POST') {
+        if (!stripe || !STRIPE_READY) return sendJson(res, 503, { ok: false, error: { code: 'STRIPE_OFF', message: 'Pagamenti non configurati.' } });
+        const ownerEmail = readOwnerEmail(id) || sessionUserOf(req)?.email || '';
+        if (!ownerEmail) return sendJson(res, 400, { ok: false, error: { code: 'NO_ACCOUNT_EMAIL', message: 'Email account non trovata.' } });
+        const plan = getAccountPlan(ownerEmail);
+        if (plan.maxPublished <= 0) return sendJson(res, 400, { ok: false, error: { code: 'NO_ACTIVE_PLAN', message: 'Nessun piano attivo: attiva un piano prima di fare upgrade.' } });
+        const nt = nextTier(plan.maxPublished, TIER_LADDER);
+        if (!nt) return sendJson(res, 409, { ok: false, error: { code: 'ALREADY_TOP_TIER', message: 'Sei già al piano massimo.' } });
+        try {
+          // recupera la subscription: dal file account, con fallback al lookup Stripe per email.
+          let subId = plan.subscriptionId || '';
+          if (!subId) {
+            const custs = await stripe.customers.list({ email: ownerEmail, limit: 1 });
+            const cust = custs.data[0];
+            if (cust) {
+              const subs = await stripe.subscriptions.list({ customer: cust.id, status: 'active', limit: 1 });
+              subId = subs.data[0]?.id || '';
+            }
+          }
+          if (!subId) return sendJson(res, 404, { ok: false, error: { code: 'NO_SUBSCRIPTION', message: 'Abbonamento non trovato.' } });
+          const sub = await stripe.subscriptions.retrieve(subId);
+          const itemId = sub.items?.data?.[0]?.id;
+          if (!itemId) return sendJson(res, 500, { ok: false, error: { code: 'NO_SUB_ITEM', message: 'Voce abbonamento non trovata.' } });
+          await stripe.subscriptions.update(subId, {
+            items: [{ id: itemId, price: nt.price }],
+            proration_behavior: 'create_prorations',
+          });
+          // Update ottimistico idempotente: il webhook customer.subscription.updated confermerà.
+          setAccountSubscription(ownerEmail, { maxPublished: nt.max, subscriptionId: subId, priceId: nt.price });
+          console.log('  -> stripe upgrade:', ownerEmail, '-> max', nt.max, subId);
+          return sendJson(res, 200, { ok: true, nextMax: nt.max });
+        } catch (e) {
+          console.log('  ✗ stripe upgrade', id, errStr(e));
+          return sendJson(res, 400, { ok: false, error: { code: 'STRIPE_ERROR', message: errStr(e) } });
+        }
+      }
+
       // Richiesta di un dominio ufficiale (concierge): salva + avvisa l'operatore.
       if (action === 'concierge' && method === 'POST') {
         const body = await readJsonBody(req);
@@ -2101,7 +2146,8 @@ const server = createServer(async (req, res) => {
           const alreadyPublished = await publishedCountForOwner(email || '');
           if (!canPublish({ entitled: !!pre.value.entitled, status: pre.value.status, publishedCount: alreadyPublished, maxPublished: plan.maxPublished })) {
             console.log('  ⛔ publish_blocked_plan_limit: ' + id + ' · owner ' + (email||'?') + ' · ' + alreadyPublished + '/' + plan.maxPublished);
-            return sendJson(res, 402, { ok: false, error: { code: 'PLAN_LIMIT_REACHED', message: 'Hai raggiunto il numero di siti pubblicabili del tuo piano. Attiva o aggiorna il piano per pubblicare altri siti.' } });
+            const nt = nextTier(plan.maxPublished, TIER_LADDER);
+            return sendJson(res, 402, { ok: false, error: { code: 'PLAN_LIMIT_REACHED', message: 'Hai raggiunto il numero di siti pubblicabili del tuo piano. Attiva o aggiorna il piano per pubblicare altri siti.', planActive: plan.maxPublished > 0, planNext: nt ? { sites: nt.max } : null } });
           }
         }
         // Fast Preview / WYSIWYG: se ci sono pagine interne ancora pending, le genero ORA in
