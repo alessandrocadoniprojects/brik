@@ -1698,7 +1698,7 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 202, { ok: true, id, gen: 'generating' });
     }
 
-    const apiMatch = path.match(/^\/api\/projects\/([^/]+)(?:\/(edit|edit-clarify|approve|publish|publish-status|revert|page|theme|email|delete|concierge|unlock|lock|checkout|domain))?$/);
+    const apiMatch = path.match(/^\/api\/projects\/([^/]+)(?:\/(edit|edit-clarify|approve|publish|publish-status|revert|page|theme|email|delete|concierge|unlock|lock|checkout|upgrade|domain))?$/);
     if (apiMatch) {
       const id = decodeURIComponent(apiMatch[1] as string);
       const action = apiMatch[2];
