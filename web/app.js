@@ -108,7 +108,7 @@ async function api(method, path, body) {
 
 async function startCheckout() {
   if (!currentId) return;
-  try { if (window.fbq) fbq('track', 'InitiateCheckout', { value: 149, currency: 'EUR' }); } catch (e) {}
+  try { if (window.fbq) fbq('track', 'InitiateCheckout', { value: 19, currency: 'EUR' }); } catch (e) {}
   try {
     const r = await api('POST', '/api/projects/' + encodeURIComponent(currentId) + '/checkout');
     if (r && r.ok && r.url) { window.location.href = r.url; return; }
@@ -1682,13 +1682,14 @@ function _showPlansPanel() {
   ov.innerHTML = '<div role="dialog" aria-modal="true" style="background:#fff;color:#111;max-width:460px;width:100%;border-radius:16px;padding:20px 22px 18px;box-shadow:0 24px 70px rgba(0,0,0,.4);">'
     + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><strong style="font-size:18px;">Piani e prezzi</strong><button id="plansClose" type="button" style="border:0;background:#eee;border-radius:8px;padding:6px 11px;cursor:pointer;font-size:15px;">\u2715</button></div>'
     + '<div style="border:1px solid #e6e6ee;border-radius:12px;padding:14px;margin-bottom:12px;">'
-    +   '<div style="font-size:15px;font-weight:700;">Sito singolo</div>'
-    +   '<div style="font-size:22px;font-weight:800;margin:4px 0;">149\u20ac <span style="font-size:13px;font-weight:500;color:#777;">primo anno</span></div>'
-    +   '<div style="font-size:13.5px;color:#555;">Poi 49\u20ac/anno. Hosting, dominio e assistenza inclusi. Costruire e provare resta gratis.</div>'
+    +   '<div style="font-size:15px;font-weight:700;margin-bottom:8px;">Abbonamento mensile \u00b7 paghi solo per pubblicare</div>'
+    +   '<div style="display:flex;justify-content:space-between;font-size:14px;padding:4px 0;"><span><strong>Base</strong> \u00b7 3 siti</span><span style="font-weight:700;">19\u20ac/mese</span></div>'
+    +   '<div style="display:flex;justify-content:space-between;font-size:14px;padding:4px 0;"><span><strong>Plus</strong> \u00b7 10 siti</span><span style="font-weight:700;">39\u20ac/mese</span></div>'
+    +   '<div style="display:flex;justify-content:space-between;font-size:14px;padding:4px 0;"><span><strong>Pro</strong> \u00b7 30 siti</span><span style="font-weight:700;">79\u20ac/mese</span></div>'
+    +   '<div style="font-size:13px;color:#555;margin-top:8px;">Generare e modificare i siti \u00e8 gratis e illimitato.</div>'
     + '</div>'
-    + '<div style="font-size:13.5px;color:#555;line-height:1.5;margin-bottom:12px;">Hai <strong>3 giorni di prova</strong> dalla creazione. Allo scadere, se non attivi il sito, va <strong>in pausa</strong>: resta salvato ma non pi\u00f9 modificabile finch\u00e9 non passi al piano a pagamento.</div>'
-    + '<div style="font-size:12px;color:#999;margin-bottom:14px;">Altri piani in arrivo.</div>'
-    + (hasSite ? '<button id="plansCheckout" type="button" style="width:100%;border:0;border-radius:10px;padding:12px;font-size:15px;font-weight:700;background:#5b5bf0;color:#fff;cursor:pointer;">Attiva il sito \u00b7 149\u20ac</button>' : '')
+    + '<div style="font-size:13.5px;color:#555;line-height:1.5;margin-bottom:14px;">Hai <strong>3 giorni di prova</strong> dalla creazione. Allo scadere, se non attivi un piano, il sito va <strong>in pausa</strong>: resta salvato ma non pi\u00f9 modificabile finch\u00e9 non passi a un piano.</div>'
+    + (hasSite ? '<button id="plansCheckout" type="button" style="width:100%;border:0;border-radius:10px;padding:12px;font-size:15px;font-weight:700;background:#5b5bf0;color:#fff;cursor:pointer;">Attiva il piano \u00b7 19\u20ac/mese</button>' : '')
     + '</div>';
   document.body.appendChild(ov);
   const close = () => ov.remove();
@@ -2317,12 +2318,12 @@ async function doEdit(instruction, sources = [], images = []) {
     const code = data.error?.code;
     if (code === 'NEEDS_AUTH') return;
     if (code === 'EDIT_CAP_REACHED') {
-      const d = addMsg('bot', `<p>Hai usato tutte le modifiche incluse nella prova.</p><p class="tiny">Per continuare a modificare il sito, attivalo.</p><p><button type="button" class="btn accent" data-checkout="1">Attiva il sito · 149€</button></p>`, 'err');
+      const d = addMsg('bot', `<p>Hai usato tutte le modifiche incluse nella prova.</p><p class="tiny">Per continuare a modificare il sito, attiva un piano.</p><p><button type="button" class="btn accent" data-checkout="1">Attiva il piano · 19€/mese</button></p>`, 'err');
       const b = d.querySelector('[data-checkout]'); if (b) b.onclick = startCheckout;
       return d;
     }
     if (code === 'SITE_LOCKED') {
-      const d = addMsg('bot', `<p>Il sito è in pausa.</p><p class="tiny">Riattivalo per poterlo modificare di nuovo.</p><p><button type="button" class="btn accent" data-checkout="1">Riattiva il sito · 149€</button></p>`, 'err');
+      const d = addMsg('bot', `<p>Il sito è in pausa.</p><p class="tiny">Riattivalo per poterlo modificare di nuovo.</p><p><button type="button" class="btn accent" data-checkout="1">Riattiva il piano · 19€/mese</button></p>`, 'err');
       const b = d.querySelector('[data-checkout]'); if (b) b.onclick = startCheckout;
       return d;
     }
