@@ -15,7 +15,7 @@
     "demo:build-browser": "tsx --env-file=.env demo/real-build-browser.ts",
     "test:repair": "tsx demo/test-repair.ts",
     "test:eval": "tsx demo/test-eval.ts",
-    "test": "tsx --test test/site.test.ts",
+    "test": "tsx --test test/*.test.ts",
     "eval": "tsx --env-file=.env demo/eval.ts",
     "typecheck": "tsc --noEmit"
   },

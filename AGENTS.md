@@ -12,8 +12,8 @@ Generatore AI di siti vetrina, venduto ad agenzie di marketing (vedi `docs/VISIO
 - Il server di produzione gira via systemd: `systemctl restart brik` (unit `brik.service`, `ExecStart=tsx --env-file=.env src/server/server.ts`).
 
 ## Baseline (NON sono regressioni tue)
-- `npm run typecheck` ha **3 errori preesistenti** noti.
-- `npm test` ha **1 fallimento noto** (`site.test #19`).
+- `npm run typecheck` ha **ZERO errori** (baseline pulita, verificata 2026-06-24).
+- `npm test` è **312/312 verde** (suite completa via `test/*.test.ts`): **nessun fallimento accettato**, lista noti vuota.
 - Regola: non aumentare il numero di errori/fallimenti. Zero *nuovi*.
 
 ## Flusso di lavoro (obbligatorio)
@@ -21,7 +21,10 @@ Generatore AI di siti vetrina, venduto ad agenzie di marketing (vedi `docs/VISIO
 2. Workflow: **analizza → conferma il piano con l'umano → implementa**. Mai codice prima del piano approvato.
 3. Scrivi la spec dal template `docs/BLOCK_TEMPLATE.md`, **dichiara i file** che toccherai.
 4. Implementa minimale, gira typecheck + test, non sforare la baseline.
-5. Apri PR. **L'umano revisiona e fa merge.** Tu non fai merge né deploy.
+5. **Gate REVIEWER obbligatorio**: ogni blocco passa il subagent `reviewer` (`.claude/agents/reviewer.md`) a context fresco prima di essere considerato chiuso. Il REVIEWER legge il diff vs `main`, gira `npm run typecheck` + `npm test` (suite completa), verifica gli INVARIANTS e dà PASS/FAIL. Un blocco è "fatto" solo a **PASS**.
+6. Apri PR con doc allineati allo stato reale (ROADMAP/INVARIANTS/changelog nello stesso branch). **Ale revisiona e fa merge su `main`.** Tu non fai merge né deploy.
+
+**Criterio PASS del gate**: typecheck ZERO errori **E** `npm test` senza fallimenti/errori NUOVI oltre la baseline. Baseline attuale: **typecheck ZERO, test tutti verdi, lista fallimenti-noti VUOTA**. La lista-noti cresce **solo con approvazione esplicita di Ale**.
 
 ## Confini (always / ask / never)
 - **Always**: leggere il repo; girare test/typecheck/lint su file cambiati; scrivere sul tuo branch.
