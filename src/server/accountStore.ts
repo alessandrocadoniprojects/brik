@@ -59,3 +59,16 @@ export function canPublish(args: { entitled: boolean; status: string; publishedC
   // nuovo slot: consentito solo se sotto il limite del piano.
   return args.publishedCount < args.maxPublished;
 }
+/** B3: maxPublished derivato dallo stato subscription Stripe. Puro, testabile. */
+export function maxPublishedForSubscription(args: {
+  eventType: string;
+  status: string;
+  priceId: string;
+  priceToMax: Record<string, number>;
+}): number {
+  const dead = args.eventType === 'customer.subscription.deleted'
+    || ['canceled', 'unpaid', 'incomplete_expired'].includes(args.status);
+  if (dead || args.status === 'incomplete') return 0;
+  // active / trialing / past_due (grace) -> concedi
+  return args.priceToMax[args.priceId] ?? 0;
+}
