@@ -8,6 +8,13 @@ B1 ✓ → B2 ✓ (live) → **B3 ✓ (mergiato su main, server allineato)** →
 ## ✅ FATTO 2026-06-25 — codice in sicurezza
 Mergiati su `main` via PR: **`block/B3-stripe`** (billing per-account), **`block/checkout-cta`** (bottone "Attiva piano"), **`block/gate-reviewer`** (gate + STATE + baseline). Server allineato: `/opt/brik` su `main` (`4d3e159`), **restart controllato pulito** (log `Pagamenti: Stripe attivo … per-account`, HTTP 200, bottone live). Disco = memoria: sparito il rischio "restart perde B3". I 3 branch mergiati si possono cancellare su GitHub.
 
+## 🚀 CHECKLIST LANCIO (stanotte, 2026-06-25)
+Ordine concordato con Ale. Ogni blocco: **gate REVIEWER → PR → merge di Ale**. Spunta man mano.
+- [ ] **1. `block/plan-upgrade`** — upgrade self-service al tier sopra (3→10→30, `subscriptions.update` con prorata; al top 30 → "contattaci"). **Gate REVIEWER PASS ✓** (typecheck ZERO, suite 319/319). Manca: test live di Ale (paga → 3 siti → 4° "Passa a 10 siti" → upgrade) + merge PR.
+- [ ] **2. `block/trial-banner-paid`** — un pagante non deve più vedere il banner "🎁 Prova gratuita". `stateView` espone `planActive`; `web/app.js` mostra "Piano attivo" anche con `st.planActive`. Trial per i non-paganti: invariato.
+- [ ] **4. Webhook Stripe doppio** — sul Dashboard Stripe togliere l'endpoint vecchio (secret diverso → firme `✗` con retry). Lo fa Ale; io guido cosa verificare e cancellare.
+- ~~**3. Account founder fuori scala** (`ale@atlantix.io`, 33 siti legacy)~~ → **FUORI dal lancio** (decisione Ale).
+
 ## Ultimo blocco chiuso lato codice
 **B3 — Billing Stripe per-account.** Stripe migrato da per-sito a per-account: price ricorrenti per tier → `maxPublished` (19€→3, 39€→10, 79€→30). Webhook `customer.subscription.*` alimenta il gate B2. Suite 312/312 verde, typecheck ZERO, gate REVIEWER PASS. Spec: `docs/blocks/B3_stripe_billing.md`.
 
