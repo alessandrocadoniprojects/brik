@@ -17,6 +17,7 @@ Un'agenzia costruisce e gestisce N siti vetrina in una frazione del tempo e del 
 ## Modello operativo
 - **White-label grigio**: il cliente finale non vede mai "brik". I siti pubblicati non portano alcun marchio brik; l'unica superficie che il cliente vede (preview link) è neutra / a marchio agenzia.
 - **Tutto in mano all'agenzia**: nessun login per il cliente finale in v1.
+- **Superficie di marketing allineata (2026-06-26).** Landing, `/pricing`, `/how-it-works` e `/templates` parlano esplicitamente al **rivenditore** (freelance marketing/agenzie): siti per i *propri clienti*, consegnati a nome dell'agenzia, nessun riferimento a brik; i piani multi-sito sono descritti come "siti online per i tuoi clienti". Prima la copy era ancora B2C ("il sito della tua attività"). (`block/landing-copy-b2b`)
 
 ## Modello di prezzo (orienta le scelte di prodotto)
 - **Modello per-account a tier (live 2026-06-24).** Abbonamento mensile ricorrente, non lineare: **19€ = 3 siti pubblicati**, 39€ = 10, 79€ = 30. L'unità che si paga è lo *slot di pubblicazione* dell'account (`maxPublished`), non il singolo sito. Tier accesi via env (`STRIPE_PRICE_BASE/PLUS/PRO`); tutti e 3 attivi al lancio.
