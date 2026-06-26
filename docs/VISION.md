@@ -37,4 +37,4 @@ Un'agenzia costruisce e gestisce N siti vetrina in una frazione del tempo e del 
 - **Non** investire nel vecchio path one-shot diretto all'attività: resta funzionante, non si sviluppa.
 
 ## Principio di qualità
-La reputazione di ogni sito è dell'**agenzia**, non di brik. La qualità (nessun placeholder pubblicato, fedeltà al design system, gate QA/Security) è un requisito di vendita, non un nice-to-have.
+La reputazione di ogni sito è dell'**agenzia**, non di brik. La qualità (nessun placeholder pubblicato, fedeltà al design system, gate QA/Security) è un requisito di vendita, non un nice-to-have. Vale anche per le **superfici di scelta in Studio**: il catalogo stili usa "Style Preview Cards" (moodboard CSS coerenti) invece di screenshot reali scalati — un'agenzia sceglie da un catalogo che sembra premium e intenzionale. (`block/style-catalog-preview-cards`)

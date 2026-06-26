@@ -1857,20 +1857,26 @@ function smartDefaultTheme(desc) {
   for (const [theme, kws] of STYLE_KEYWORDS) { if (kws.some((k) => d.includes(k))) return theme; }
   return 'scandinavian-service';
 }
-const STYLE_DESIGN_W = 980;
-const STYLE_DESIGN_H = 760;
-function scaleStyleFrames() {
-  document.querySelectorAll('.sp-frame').forEach((frame) => {
-    const w = frame.clientWidth;
-    if (!w) return;
-    const scale = w / STYLE_DESIGN_W;
-    const ifr = frame.querySelector('.sp-if');
-    if (!ifr) return;
-    ifr.style.width = STYLE_DESIGN_W + 'px';
-    ifr.style.height = STYLE_DESIGN_H + 'px';
-    ifr.style.transform = 'scale(' + scale + ')';
-    frame.style.height = STYLE_DESIGN_H * scale + 'px';
-  });
+// Meta di presentazione del catalogo stili (solo UI). Chiave = theme id (invariato,
+// alimenta la generazione). title = 1 parola dentro la preview; name+mood nel footer.
+const STYLE_PREVIEW_META = {
+  'editorial-luxury':     { title: 'Maison',  name: 'Editorial Luxury',     mood: 'elegante · autorevole · editoriale', previewKind: 'editorialLuxury' },
+  'athletic-premium':     { title: 'Apex',    name: 'Athletic Premium',     mood: 'energetico · tecnico · premium',     previewKind: 'athleticPremium' },
+  'scandinavian-service': { title: 'Stille',  name: 'Scandinavian Service', mood: 'calmo · chiaro · affidabile',         previewKind: 'scandinavianService' },
+  'warm-bistro':          { title: 'Forno',   name: 'Warm Bistro',          mood: 'caldo · artigianale · conviviale',    previewKind: 'warmBistro' },
+  'modern-saas':          { title: 'Cadence', name: 'Modern SaaS',          mood: 'scuro · preciso · digitale',          previewKind: 'modernSaas' },
+  'creative-studio':      { title: 'Studio',  name: 'Creative Studio',      mood: 'grafico · bold · culturale',          previewKind: 'creativeStudio' },
+  'future-minimal':       { title: 'Halo',    name: 'Future Minimal',       mood: 'pulito · futuribile · prodotto',      previewKind: 'futureMinimal' },
+  'modern-community':     { title: 'Atelier', name: 'Modern Community',     mood: 'umano · locale · partecipativo',      previewKind: 'modernCommunity' },
+  'industrial-bold':      { title: 'Ferro',   name: 'Industrial Bold',      mood: 'solido · materico · diretto',         previewKind: 'industrialBold' },
+};
+// Markup interno di una preview: header (titolo 1 parola + dot) + body con 3 blocchi
+// decorativi generici (.pv1/.pv2/.pv3) che ogni variante .preview-* stila a modo suo.
+function stylePreviewInnerHTML(m) {
+  return (
+    '<span class="previewHeader"><span class="previewTitle">' + m.title + '</span><span class="previewDot"></span></span>' +
+    '<span class="previewBody"><i class="pv pv1"></i><i class="pv pv2"></i><i class="pv pv3"></i></span>'
+  );
 }
 function askStyle(description, recommended, onPick) {
   intakeActive = true;
@@ -1892,40 +1898,45 @@ function askStyle(description, recommended, onPick) {
   hint.textContent = 'Per la tua attività ho scelto uno stile, se ti va puoi cambiarlo dopo.';
   wrap.appendChild(hint);
 
-  // Anteprima dello stile consigliato (una sola, leggera).
+  // Anteprima dello stile consigliato (moodboard CSS, formato grande).
   const preview = document.createElement('div');
-  preview.className = 'style-card sel';
+  preview.className = 'stylePreview stylePreview--lead';
   const nameEl = document.createElement('p');
   nameEl.style.cssText = 'text-align:center;font-weight:600;margin:8px 0 2px;font-size:14px;';
   const renderPreview = () => {
-    const s = STYLES.find((x) => x.id === chosen) || STYLES[0];
-    preview.innerHTML = '<span class="sp-frame"><iframe class="sp-if" loading="lazy" tabindex="-1" title="' + s.name + '" src="/style-samples/' + s.id + '.html"></iframe></span>';
-    nameEl.textContent = s.name;
-    requestAnimationFrame(scaleStyleFrames);
-    setTimeout(scaleStyleFrames, 160);
+    const m = STYLE_PREVIEW_META[chosen] || STYLE_PREVIEW_META[STYLES[0].id];
+    preview.className = 'stylePreview stylePreview--lead preview-' + m.previewKind;
+    preview.innerHTML = stylePreviewInnerHTML(m);
+    nameEl.textContent = m.name;
   };
   wrap.appendChild(preview);
   wrap.appendChild(nameEl);
 
-  // Griglia completa, nascosta finché non chiede di vederla.
-  // NB: uso display inline, non l'attributo hidden — .style-grid ha un display nel CSS che lo sovrascriverebbe.
+  // Catalogo completo (Style Preview Cards), nascosto finché non chiede di vederlo.
+  // NB: uso display inline, non l'attributo hidden — .catalogGrid ha un display nel CSS che lo sovrascriverebbe.
   const grid = document.createElement('div');
-  grid.className = 'style-grid';
+  grid.className = 'catalogGrid';
   grid.style.display = 'none';
   const cards = {};
   STYLES.forEach((s) => {
+    const m = STYLE_PREVIEW_META[s.id];
+    if (!m) return;
+    const sel = s.id === chosen;
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'style-card' + (s.id === chosen ? ' sel' : '');
-    b.dataset.theme = s.id;
-    b.setAttribute('aria-label', s.name);
+    b.className = 'styleCard';
+    b.dataset.themeId = s.id;
+    b.dataset.selected = sel ? 'true' : 'false';
+    b.setAttribute('aria-pressed', sel ? 'true' : 'false');
+    b.setAttribute('aria-label', 'Seleziona ' + m.name + ', ' + m.mood.replace(/ · /g, ' '));
     b.innerHTML =
-      '<span class="sp-frame"><iframe class="sp-if" loading="lazy" tabindex="-1" title="' + s.name + '" src="/style-samples/' + s.id + '.html"></iframe></span>' +
-      '<span style="display:block;text-align:center;font-size:12px;margin-top:4px;opacity:.85;">' + s.name + '</span>';
+      '<span class="stylePreview preview-' + m.previewKind + '">' + stylePreviewInnerHTML(m) + '</span>' +
+      '<span class="styleFooter"><span class="styleName">' + m.name + '</span><span class="styleMood">' + m.mood + '</span></span>';
     b.addEventListener('click', () => {
       chosen = s.id;
-      Object.values(cards).forEach((c) => c.classList.remove('sel'));
-      b.classList.add('sel');
+      Object.values(cards).forEach((c) => { c.dataset.selected = 'false'; c.setAttribute('aria-pressed', 'false'); });
+      b.dataset.selected = 'true';
+      b.setAttribute('aria-pressed', 'true');
       renderPreview();
     });
     cards[s.id] = b;
@@ -1943,7 +1954,7 @@ function askStyle(description, recommended, onPick) {
     const show = grid.style.display === 'none';
     grid.style.display = show ? '' : 'none';
     seeAll.textContent = show ? 'Nascondi il catalogo' : 'Non fa per me — scegli dal catalogo';
-    if (show) { requestAnimationFrame(scaleStyleFrames); setTimeout(scaleStyleFrames, 160); messages.scrollTop = messages.scrollHeight; }
+    if (show) { messages.scrollTop = messages.scrollHeight; }
   });
   ctrls.appendChild(seeAll);
   const spacer = document.createElement('span');
@@ -1963,7 +1974,6 @@ function askStyle(description, recommended, onPick) {
 
   renderPreview();
   messages.scrollTop = messages.scrollHeight;
-  if (!window.__brikStyleResize) { window.__brikStyleResize = true; window.addEventListener('resize', scaleStyleFrames); }
 }
 
 // Domanda condizionale dopo la scelta del tema:
