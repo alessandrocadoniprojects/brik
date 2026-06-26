@@ -1882,7 +1882,10 @@ function askStyle(description, recommended, onPick) {
   intakeActive = true;
   disableSend(true);
   const valid = STYLES.some((s) => s.id === recommended);
-  let chosen = valid ? recommended : smartDefaultTheme(description);
+  // Tema consigliato (LLM o euristica): usato SOLO dalla scorciatoia "Scegli per me",
+  // non più preselezionato. La scelta manuale dal catalogo è il percorso primario.
+  const rec = valid ? recommended : smartDefaultTheme(description);
+  let chosen = null;
 
   const wrap = document.createElement('div');
   wrap.className = 'msg bot intake style-step';
@@ -1895,84 +1898,69 @@ function askStyle(description, recommended, onPick) {
 
   const hint = document.createElement('p');
   hint.className = 'intake-hint';
-  hint.textContent = 'Per la tua attività ho scelto uno stile, se ti va puoi cambiarlo dopo.';
+  hint.textContent = 'Scegli lo stile del sito: nove direzioni diverse. Oppure lascia scegliere a noi.';
   wrap.appendChild(hint);
 
-  // Anteprima dello stile consigliato (moodboard CSS, formato grande).
-  const preview = document.createElement('div');
-  preview.className = 'stylePreview stylePreview--lead';
-  const nameEl = document.createElement('p');
-  nameEl.style.cssText = 'text-align:center;font-weight:600;margin:8px 0 2px;font-size:14px;';
-  const renderPreview = () => {
-    const m = STYLE_PREVIEW_META[chosen] || STYLE_PREVIEW_META[STYLES[0].id];
-    preview.className = 'stylePreview stylePreview--lead preview-' + m.previewKind;
-    preview.innerHTML = stylePreviewInnerHTML(m);
-    nameEl.textContent = m.name;
-  };
-  wrap.appendChild(preview);
-  wrap.appendChild(nameEl);
-
-  // Catalogo completo (Style Preview Cards), nascosto finché non chiede di vederlo.
-  // NB: uso display inline, non l'attributo hidden — .catalogGrid ha un display nel CSS che lo sovrascriverebbe.
+  // Catalogo (Style Preview Cards) visibile da subito: la selezione manuale è il gesto principale.
   const grid = document.createElement('div');
   grid.className = 'catalogGrid';
-  grid.style.display = 'none';
   const cards = {};
+  let go; // primario "Crea con questo stile": dichiarato sotto, appare alla prima selezione.
   STYLES.forEach((s) => {
     const m = STYLE_PREVIEW_META[s.id];
     if (!m) return;
-    const sel = s.id === chosen;
+    const isRec = s.id === rec;
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'styleCard';
     b.dataset.themeId = s.id;
-    b.dataset.selected = sel ? 'true' : 'false';
-    b.setAttribute('aria-pressed', sel ? 'true' : 'false');
-    b.setAttribute('aria-label', 'Seleziona ' + m.name + ', ' + m.mood.replace(/ · /g, ' '));
+    b.dataset.selected = 'false';
+    b.setAttribute('aria-pressed', 'false');
+    b.setAttribute('aria-label', 'Seleziona ' + m.name + ', ' + m.mood.replace(/ · /g, ' ') + (isRec ? ' (consigliato)' : ''));
     b.innerHTML =
-      '<span class="stylePreview preview-' + m.previewKind + '">' + stylePreviewInnerHTML(m) + '</span>' +
+      '<span class="stylePreview preview-' + m.previewKind + '">' + stylePreviewInnerHTML(m) +
+        (isRec ? '<span class="styleRecBadge">consigliato</span>' : '') +
+      '</span>' +
       '<span class="styleFooter"><span class="styleName">' + m.name + '</span><span class="styleMood">' + m.mood + '</span></span>';
     b.addEventListener('click', () => {
       chosen = s.id;
       Object.values(cards).forEach((c) => { c.dataset.selected = 'false'; c.setAttribute('aria-pressed', 'false'); });
       b.dataset.selected = 'true';
       b.setAttribute('aria-pressed', 'true');
-      renderPreview();
+      if (go) go.style.display = '';
     });
     cards[s.id] = b;
     grid.appendChild(b);
   });
   wrap.appendChild(grid);
 
+  const proceed = (theme) => {
+    wrap.querySelectorAll('button').forEach((e) => (e.disabled = true));
+    wrap.classList.add('done');
+    askVisualOptions(theme, (opts) => onPick(theme, opts));
+  };
+
   const ctrls = document.createElement('div');
   ctrls.className = 'intake-controls';
-  const seeAll = document.createElement('button');
-  seeAll.type = 'button';
-  seeAll.className = 'btn ghost';
-  seeAll.textContent = 'Non fa per me — scegli dal catalogo';
-  seeAll.addEventListener('click', () => {
-    const show = grid.style.display === 'none';
-    grid.style.display = show ? '' : 'none';
-    seeAll.textContent = show ? 'Nascondi il catalogo' : 'Non fa per me — scegli dal catalogo';
-    if (show) { messages.scrollTop = messages.scrollHeight; }
-  });
-  ctrls.appendChild(seeAll);
-  const spacer = document.createElement('span');
-  spacer.style.flex = '1';
-  ctrls.appendChild(spacer);
-  const go = document.createElement('button');
+  go = document.createElement('button');
   go.type = 'button';
   go.className = 'btn accent';
   go.textContent = 'Crea con questo stile';
-  go.addEventListener('click', () => {
-    wrap.querySelectorAll('button').forEach((e) => (e.disabled = true));
-    wrap.classList.add('done');
-    askVisualOptions(chosen, (opts) => onPick(chosen, opts));
-  });
+  go.style.display = 'none'; // appare quando l'utente seleziona una card
+  go.addEventListener('click', () => { if (chosen) proceed(chosen); });
   ctrls.appendChild(go);
+  const spacer = document.createElement('span');
+  spacer.style.flex = '1';
+  ctrls.appendChild(spacer);
+  // Scorciatoia secondaria: scelta assistita (NON casuale) col tema consigliato.
+  const auto = document.createElement('button');
+  auto.type = 'button';
+  auto.className = 'btn ghost';
+  auto.textContent = '✨ Scegli per me';
+  auto.addEventListener('click', () => proceed(rec));
+  ctrls.appendChild(auto);
   wrap.appendChild(ctrls);
 
-  renderPreview();
   messages.scrollTop = messages.scrollHeight;
 }
 
