@@ -1767,6 +1767,15 @@ function updatePlanChip(st) {
   _planChip.hidden = false;
 }
 
+// Soglia "descrizione sufficiente": >= 15 caratteri e >= 2 parole (dopo trim).
+// Sopra soglia il path "scrivo io / so già cosa voglio" è implicito → si salta
+// lo step "Da dove vuoi partire?". Sotto soglia (input troppo corto) lo step resta,
+// così restano raggiungibili anche i path da sito/social/materiali esistenti.
+function isSelfDescribed(text) {
+  const t = (text || '').trim();
+  return t.length >= 15 && t.split(/\s+/).filter(Boolean).length >= 2;
+}
+
 async function beginCreate(description, sources = [], images = [], attachedNames = []) {
   hideLanding();
   addMsg('user', escapeHtml(description) + attachedNamesHtml(attachedNames));
@@ -1775,8 +1784,8 @@ async function beginCreate(description, sources = [], images = [], attachedNames
   // Per tutta la durata dell'intake la chat non si usa: resta solo "Avanti" nelle domande.
   intakeActive = true;
   disableSend(true);
-  // Prima capisci da dove parte l'utente, poi prosegui col flusso esistente.
-  askStartingPoint(async (sp) => {
+  // Noto lo starting point, prosegue col flusso esistente (pizzeria verticale o intake generico).
+  const afterStartingPoint = async (sp) => {
     pendingStartingPoint = sp || null;
     // Se è chiaramente una pizzeria, domande verticali specifiche prima delle altre.
     try {
@@ -1788,7 +1797,11 @@ async function beginCreate(description, sources = [], images = [], attachedNames
       }
     } catch (e) { /* se il piano fallisce, prosegui senza domande verticali */ }
     void continueCreate(description, sources, images);
-  });
+  };
+  // Opzione B: descrizione già sufficiente → path "scrivo io" implicito, salta "Da dove vuoi partire?"
+  // ed entra diretto nello step successivo. Descrizione breve → mostra lo step (path da sito/social raggiungibili).
+  if (isSelfDescribed(description)) afterStartingPoint({ mode: 'free-description' });
+  else askStartingPoint(afterStartingPoint);
 }
 
 async function continueCreate(description, sources = [], images = []) {

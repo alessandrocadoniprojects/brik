@@ -78,6 +78,7 @@
 /* Hero prompt box (in-app landing) */
 .mkt .promptbox { max-width: 600px; margin: 30px auto 0; background: var(--panel); border: 1px solid var(--line-2); border-radius: 18px; padding: 14px; box-shadow: 0 40px 90px -50px rgba(124,140,255,.8); text-align: left; transition: border-color .16s, box-shadow .2s; }
 .mkt .promptbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), 0 40px 90px -50px rgba(124,140,255,.8); }
+.mkt .promptbox-label { display: block; margin: 4px 10px 6px; font-family: var(--m-sans); font-size: .95rem; font-weight: 600; color: var(--ink); }
 .mkt .promptbox textarea { width: 100%; min-height: 78px; resize: none; border: 0; background: transparent; color: var(--ink); font-family: var(--m-sans); font-size: 1.05rem; line-height: 1.5; padding: 8px 10px; outline: none; }
 .mkt .promptbox textarea::placeholder { color: var(--ink-faint); }
 .mkt .promptbox .row { display: flex; justify-content: flex-end; }
