@@ -595,10 +595,104 @@ body.has-landing .landing.mkt { display: block; }
 
 /* --- Selettore stile (intake) --- */
 .style-step .q { margin-bottom: 2px; }
-.style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin: 12px 0 4px; }
-.style-card { padding: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--inset); cursor: pointer; overflow: hidden; display: block; width: 100%; transition: border-color .15s, box-shadow .15s; }
-.style-card:hover { border-color: var(--line-2); }
-.style-card.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
-.sp-frame { position: relative; width: 100%; height: 124px; overflow: hidden; background: #fff; }
-.sp-if { border: 0; display: block; pointer-events: none; transform-origin: top left; background: #fff; }
+/* Catalogo stili — "Style Preview Cards": moodboard CSS, nessun iframe/screenshot. */
+.catalogGrid { display: grid; grid-template-columns: repeat(2, minmax(128px, 1fr)); gap: 12px; margin: 12px 0 4px; }
+.styleCard { min-width: 0; padding: 6px; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; background: rgba(255,255,255,0.035); cursor: pointer; display: block; width: 100%; text-align: left; -webkit-appearance: none; appearance: none; transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease; }
+.styleCard:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.18); }
+.styleCard, .styleFooter, .stylePreview { overflow: hidden; }
+.styleCard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.styleCard[data-selected="true"] { border-color: #7C6BFF; box-shadow: 0 0 0 1px rgba(124,107,255,.45), 0 12px 32px rgba(0,0,0,.28); }
+
+.stylePreview { position: relative; aspect-ratio: 4 / 5; border-radius: 12px; overflow: hidden; isolation: isolate; display: block; width: 100%; min-width: 0; }
+.stylePreview--lead { max-width: 172px; aspect-ratio: 4 / 5; margin: 12px auto 2px; border-radius: 14px; box-shadow: 0 0 0 1px rgba(124,107,255,.40), 0 10px 26px rgba(0,0,0,.26); }
+.previewHeader { position: absolute; top: 9px; left: 11px; right: 11px; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
+.previewTitle { min-width: 0; font-family: system-ui, sans-serif; font-size: 16px; font-weight: 700; letter-spacing: -.03em; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.previewDot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .55; }
+.previewBody { position: absolute; inset: 0; z-index: 1; }
+.stylePreview .pv { position: absolute; display: block; }
+.stylePreview--lead .previewTitle { font-size: 19px; }
+
+.styleFooter { display: block; min-width: 0; padding: 7px 4px 3px; }
+.styleName { display: block; font-size: 11px; font-weight: 650; color: rgba(255,255,255,.92); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.styleMood { display: block; margin-top: 2px; font-size: 9px; line-height: 1.2; color: rgba(255,255,255,.48); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 1 · Editorial Luxury — avorio, serif, filo oro, rettangolo astratto laterale, asimmetria magazine */
+.preview-editorialLuxury { background: linear-gradient(180deg,#FBF8F2 0%,#F1E9DC 100%); color: #2B241C; }
+.preview-editorialLuxury .previewTitle { font-family: Georgia,'Times New Roman',serif; font-style: italic; font-size: 19px; letter-spacing: -.02em; }
+.preview-editorialLuxury .previewDot { background: #A8854C; opacity: .9; }
+.preview-editorialLuxury::before { content:""; position:absolute; left:8%; right:8%; top:30%; height:1px; background: linear-gradient(90deg,transparent,rgba(168,133,76,.75),transparent); }
+.preview-editorialLuxury .pv1 { right:8%; top:36%; width:30%; bottom:14%; border-radius:3px; background: linear-gradient(160deg,#E7D8BE,#C9B48C); }
+.preview-editorialLuxury .pv2 { left:8%; top:44%; width:42%; height:4.5%; background: rgba(43,36,28,.22); border-radius:2px; }
+.preview-editorialLuxury .pv3 { left:8%; top:56%; width:30%; height:4.5%; background: rgba(43,36,28,.13); border-radius:2px; }
+
+/* 2 · Athletic Premium — grafite, condensed, motion stripes, accento lime, blocchi numerici */
+.preview-athleticPremium { background: linear-gradient(180deg,#191B1F 0%,#0B0C0E 100%); color: #F3F5F2; }
+.preview-athleticPremium .previewTitle { font-family:'Arial Narrow','Helvetica Neue',system-ui,sans-serif; font-stretch: condensed; font-size: 21px; font-weight: 800; text-transform: uppercase; letter-spacing: -.01em; }
+.preview-athleticPremium .previewDot { background:#C2F23E; opacity:1; }
+.preview-athleticPremium::before { content:""; position:absolute; inset:0; background: repeating-linear-gradient(-26deg, transparent 0 15%, rgba(255,255,255,.05) 15% 15.7%); }
+.preview-athleticPremium::after { content:""; position:absolute; left:-10%; bottom:32%; width:120%; height:2px; background:#C2F23E; transform: rotate(-26deg); opacity:.85; }
+.preview-athleticPremium .pv1 { left:8%; bottom:12%; width:24%; height:9%; background: rgba(255,255,255,.12); border-radius:3px; }
+.preview-athleticPremium .pv2 { left:36%; bottom:12%; width:24%; height:9%; background: rgba(255,255,255,.06); border-radius:3px; }
+.preview-athleticPremium .pv3 { display:none; }
+
+/* 3 · Scandinavian Service — bianco caldo, griglia sottile, tracking largo, accento blu/grigio, spazio */
+.preview-scandinavianService { background:#F6F4F0; color:#26282A; }
+.preview-scandinavianService .previewTitle { font-size: 12.5px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; }
+.preview-scandinavianService .previewDot { background:#5E7184; opacity:.9; }
+.preview-scandinavianService::before { content:""; position:absolute; inset:0; background-image: linear-gradient(rgba(38,40,42,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(38,40,42,.055) 1px,transparent 1px); background-size: 22% 22%; }
+.preview-scandinavianService .pv1 { left:9%; top:48%; width:38%; height:3.6%; background: rgba(38,40,42,.20); border-radius:2px; }
+.preview-scandinavianService .pv2 { left:9%; top:58%; width:24%; height:3.6%; background: rgba(38,40,42,.11); border-radius:2px; }
+.preview-scandinavianService .pv3 { left:9%; bottom:14%; width:30%; height:6.5%; border:1px solid rgba(94,113,132,.55); border-radius:999px; }
+
+/* 4 · Warm Bistro — crema, serif, accento terracotta, cerchio "piatto", righe menu */
+.preview-warmBistro { background: radial-gradient(circle at 74% 72%, rgba(194,80,46,.30) 0 15%, transparent 16%), linear-gradient(180deg,#FAF5EC 0%,#F2E4D0 100%); color:#2B1E18; }
+.preview-warmBistro .previewTitle { font-family: Georgia,serif; font-size: 20px; letter-spacing:-.04em; }
+.preview-warmBistro .previewDot { background:#C2502E; opacity:.95; }
+.preview-warmBistro::before { content:""; position:absolute; left:9%; right:9%; top:31%; height:1px; background: rgba(43,30,24,.14); }
+.preview-warmBistro .pv1 { left:9%; top:43%; width:40%; height:4.5%; background: rgba(43,30,24,.20); border-radius:2px; }
+.preview-warmBistro .pv2 { left:9%; top:55%; width:30%; height:4.5%; background: rgba(43,30,24,.12); border-radius:2px; }
+.preview-warmBistro .pv3 { right:9%; top:43%; width:11%; height:4.5%; background: rgba(194,80,46,.6); border-radius:2px; }
+
+/* 5 · Modern SaaS — quasi nero, sans bianco, accento blu/violetto, mini dashboard */
+.preview-modernSaas { background: radial-gradient(circle at 82% 16%, rgba(107,99,255,.30), transparent 36%), linear-gradient(180deg,#10131C 0%,#080A0F 100%); color:#F6F7FB; }
+.preview-modernSaas .previewTitle { font-family: Inter,system-ui,sans-serif; font-size:16px; font-weight:800; letter-spacing:-.05em; }
+.preview-modernSaas .previewDot { background:#6B63FF; opacity:1; }
+.preview-modernSaas .pv1 { left:10%; right:10%; bottom:12%; height:30%; border-radius:8px; background: linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.03)); border:1px solid rgba(255,255,255,.10); }
+.preview-modernSaas .pv2 { left:16%; bottom:16%; width:30%; height:13%; background: repeating-linear-gradient(90deg,#6B63FF 0 4px,transparent 4px 9px); opacity:.9; }
+.preview-modernSaas .pv3 { right:14%; top:42%; width:24%; height:6.5%; border-radius:999px; background: rgba(107,99,255,.32); border:1px solid rgba(107,99,255,.5); }
+
+/* 6 · Creative Studio — carta off-white, typo nera, blocchi sovrapposti, accento rosso */
+.preview-creativeStudio { background:#F1EDE4; color:#141210; }
+.preview-creativeStudio .previewTitle { font-family:'Helvetica Neue',Arial,sans-serif; font-size:19px; font-weight:800; letter-spacing:-.04em; }
+.preview-creativeStudio .previewDot { background:#E8431F; opacity:1; }
+.preview-creativeStudio .pv1 { left:12%; bottom:16%; width:38%; height:34%; background:#1A1714; }
+.preview-creativeStudio .pv2 { left:31%; bottom:23%; width:34%; height:30%; border:2px solid #1A1714; }
+.preview-creativeStudio .pv3 { right:15%; top:40%; width:13%; height:9%; background:#E8431F; }
+
+/* 7 · Future Minimal — grigio chiarissimo, forme arrotondate, moduli prodotto, accento blu tenue */
+.preview-futureMinimal { background: linear-gradient(180deg,#F2F3F5 0%,#E8EAED 100%); color:#16181C; }
+.preview-futureMinimal .previewTitle { font-size:16px; font-weight:600; letter-spacing:-.02em; }
+.preview-futureMinimal .previewDot { background:#5566FF; opacity:.85; }
+.preview-futureMinimal .pv1 { left:14%; right:14%; bottom:14%; height:30%; border-radius:14px; background: rgba(22,24,28,.06); border:1px solid rgba(22,24,28,.10); }
+.preview-futureMinimal .pv2 { left:50%; top:42%; transform:translateX(-50%); width:30%; height:6.5%; border-radius:999px; background: rgba(85,102,255,.16); border:1px solid rgba(85,102,255,.35); }
+.preview-futureMinimal .pv3 { display:none; }
+
+/* 8 · Modern Community — crema, friendly, accenti terracotta/verde/pesca, avatar astratti, riga evento */
+.preview-modernCommunity { background: linear-gradient(180deg,#FBF4E9 0%,#F5E9D7 100%); color:#241C16; }
+.preview-modernCommunity .previewTitle { font-size:16px; font-weight:700; letter-spacing:-.02em; }
+.preview-modernCommunity .previewDot { background:#D98248; opacity:1; }
+.preview-modernCommunity::before { content:""; position:absolute; left:10%; right:10%; bottom:18%; height:9%; border-radius:8px; background: rgba(36,28,22,.06); border:1px solid rgba(36,28,22,.10); }
+.preview-modernCommunity .pv1 { left:10%; top:42%; width:13%; height:10.4%; border-radius:50%; background:#D98248; }
+.preview-modernCommunity .pv2 { left:19%; top:42%; width:13%; height:10.4%; border-radius:50%; background:#5C9E6E; }
+.preview-modernCommunity .pv3 { left:28%; top:42%; width:13%; height:10.4%; border-radius:50%; background:#E7A977; }
+
+/* 9 · Industrial Bold — carbone, uppercase pesante, accento ruggine, blocchi materici, righe tecniche */
+.preview-industrialBold { background: linear-gradient(180deg,#161616 0%,#0A0A0A 100%); color:#F2F0EA; }
+.preview-industrialBold .previewTitle { font-family:'Arial Black',Impact,system-ui,sans-serif; font-size:19px; font-weight:900; text-transform:uppercase; letter-spacing:-.03em; }
+.preview-industrialBold .previewDot { background:#C7663E; opacity:1; border-radius:0; }
+.preview-industrialBold::before { content:""; position:absolute; left:0; right:0; top:34%; height:1px; background: rgba(255,255,255,.14); }
+.preview-industrialBold::after { content:""; position:absolute; right:12%; top:21%; width:9%; height:7.2%; background:#C7663E; }
+.preview-industrialBold .pv1 { left:8%; bottom:14%; width:34%; height:26%; background: rgba(255,255,255,.07); }
+.preview-industrialBold .pv2 { left:46%; bottom:14%; width:20%; height:26%; background: rgba(199,102,62,.30); }
+.preview-industrialBold .pv3 { left:8%; top:44%; width:50%; height:4.5%; background: rgba(255,255,255,.12); }
 .style-step .intake-controls { margin-top: 10px; }
