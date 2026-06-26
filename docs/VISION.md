@@ -2,6 +2,11 @@
 
 > Documento di prodotto canonico. Lo legge l'**Architect agent** in fase di planning per decidere se un blocco serve il goal. Non è l'AGENTS.md (che resta magro): si apre on-demand.
 
+## ⚠️ Posizionamento corrente (2026-06-26) — PIVOT a B2C
+**Torniamo a parlare alla singola attività.** Brik è lo strumento con cui **chi ha un'attività crea il sito vetrina da solo, descrivendolo a parole, senza saper programmare** — con tutte le integrazioni (contatti, mappa, WhatsApp, orari, social) già funzionanti. **Prezzo unico: 4€/mese per sito tenuto online** (build/prova gratis; dopo la pubblicazione 24h di prova dal vivo, poi 4€/mese o il sito va offline+bloccato — lock, non delete).
+
+Il modello **B2B / rivenditore (agenzie, white-label, piani multi-sito 19/39/79€)** descritto nelle sezioni qui sotto è **PARCHEGGIATO** (reversibile): tag `parked/landing-b2b` + `docs/parked/landing-b2b.md`. Marketing già B2C (`block/relaunch-b2c-flat`); il billing 4€/sito è in implementazione (blocco dedicato). Finché non riscrivo per intero le sezioni sotto, **vale questa nota** sopra di esse.
+
 ## Cos'è brik
 Lo strumento con cui i **consulenti / agenzie di digital marketing** generano, pubblicano e gestiscono velocemente e a basso costo siti vetrina per i loro clienti.
 

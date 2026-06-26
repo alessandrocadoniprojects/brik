@@ -3,6 +3,12 @@
 > Roadmap **prospettica** (cosa costruire), non retrospettiva come i `FASE*.md`. Ogni blocco = una Issue = un branch. L'Architect agent la legge con `VISION.md` per giudicare se un blocco serve il goal.
 > Stato: `next` / `in-progress` / `review` / `done`. Default `next`.
 
+## Pivot B2C + prezzo unico 4€/sito (2026-06-26)
+Torniamo a parlare alla **singola attività** (no rivenditori) e a un **prezzo unico 4€/mese per sito attivo**. Il B2B è parcheggiato (`parked/landing-b2b`).
+- **B-B2C — Marketing B2C + pricing 4€ (copy). `done` (2026-06-26).** Landing (`index.html`), `/pricing`, `/how-it-works`, `/templates` riscritte: hero/closing/footer parlano alla singola attività ("crea il tuo sito senza saper programmare, con tutte le integrazioni"), card "Integrazioni incluse" via "Senza marchio Brik", pricing 3-tier → **card unica 4€/mese per sito** (build gratis, 24h di prova dopo il publish, poi 4€ o offline). Solo copy. Parcheggio B2B (tag + `docs/parked/landing-b2b.md`), VISION aggiornata.
+- **B-PRICE — Billing flat per-sito (Stripe, live). `next`.** Price unico `STRIPE_PRICE_SITE` (4€/mese, `price_1Tmh…4zmm`), modello a quantità: webhook `quantity → maxPublished`, checkout a quantità, rimozione tier BASE/PLUS/PRO. Verifica reale con account operatore (checkout 4€ → rimborso). Webhook unico (`STRIPE_WEBHOOK_SECRET` nuovo, vecchio endpoint cancellato).
+- **B-TRIAL24 — Trial 24h post-pubblicazione. `next`.** Riuso `sweepTrials`/`trialPhase`/`sweepTimer`: trial parte alla *pubblicazione*, finestra 24h, allo scadere **offline + lock** (non delete, coerente B7); pop-up "attiva 4€/mese" subito dopo il publish; pubblicazione diventa libera (gate spostato dal pre-publish al 24h-post-publish).
+
 ## Precondizione (blocca tutto)
 - **P0 — Allineamento prod↔git.** Committare/scartare i 7 file modificati su prod, ripulire la dir di deploy (segreti, zip, dati runtime fuori dalla web-root), ruotare la `.pem`. *Accettazione: `main` == produzione, niente file sensibili in `/opt/brik`.*
 
