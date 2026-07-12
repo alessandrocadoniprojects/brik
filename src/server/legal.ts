@@ -30,6 +30,7 @@ export interface LegalOpts {
   name: string; // nome attività (fallback se manca ragione sociale)
   email: string; // email di contatto del titolare
   legal: LegalData;
+  prospect?: boolean; // sito dimostrativo non rivendicato → pagine legali neutre (niente titolare/email personale)
 }
 
 function esc(s: string): string {
@@ -80,13 +81,16 @@ function titolare(o: LegalOpts): string {
 /** Riga footer legale, stile adattivo (eredita il colore del testo del sito). */
 function legalBar(o: LegalOpts): string {
   const year = new Date().getFullYear();
-  const n = esc(o.legal.legalName || o.name || '');
-  const v = o.legal.vat ? ' · P.IVA ' + esc(o.legal.vat) : '';
-  const a = o.legal.address ? ' · ' + esc(o.legal.address) : '';
+  // Sui siti prospect (demo non rivendicati) NON dichiariamo un titolare: solo "© anno"
+  // + i link. Sui siti rivendicati resta la ragione sociale (+ P.IVA/indirizzo se presenti).
+  const n = o.prospect ? '' : esc(o.legal.legalName || o.name || '');
+  const v = (!o.prospect && o.legal.vat) ? ' · P.IVA ' + esc(o.legal.vat) : '';
+  const a = (!o.prospect && o.legal.address) ? ' · ' + esc(o.legal.address) : '';
+  const holder = n ? ' ' + n + v + a : '';
   return (
     '<div data-brik-legal style="font:13px/1.6 system-ui,-apple-system,sans-serif;text-align:center;' +
     'padding:18px 16px;opacity:.65;border-top:1px solid currentColor;color:inherit">' +
-    '© ' + year + ' ' + n + v + a +
+    '© ' + year + holder +
     ' · <a href="/privacy" style="color:inherit;text-decoration:underline">Privacy</a>' +
     ' · <a href="/cookie" style="color:inherit;text-decoration:underline">Cookie</a>' +
     '</div>'
@@ -128,7 +132,16 @@ function legalDateLabel(): string {
   try { return new Date().toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return ''; }
 }
 
+/** Testo legale NEUTRO per i siti dimostrativi non ancora rivendicati: nessun titolare del
+ * trattamento dichiarato, nessuna email personale. Usato per privacy e cookie. */
+function neutralLegalBody(h1: string): string {
+  return '<h1>' + esc(h1) + '</h1>' +
+    '<p>Questo è un sito dimostrativo, non ancora attivo. Non raccoglie né tratta dati personali dei visitatori. ' +
+    'Per informazioni: <a href="mailto:ciao@thebrik.it">ciao@thebrik.it</a></p>';
+}
+
 function privacyPage(o: LegalOpts): string {
+  if (o.prospect) return page('Privacy Policy', neutralLegalBody('Informativa sulla privacy'));
   if (hasExtendedLegal(o.legal)) {
     const prof = legalDataToProfile(o.legal);
     if (!prof.legalName && o.name) prof.legalName = o.name;
@@ -156,6 +169,7 @@ function privacyPage(o: LegalOpts): string {
 }
 
 function cookiePage(o: LegalOpts): string {
+  if (o.prospect) return page('Cookie Policy', neutralLegalBody('Cookie Policy'));
   if (hasExtendedLegal(o.legal)) {
     const prof = legalDataToProfile(o.legal);
     if (!prof.legalName && o.name) prof.legalName = o.name;

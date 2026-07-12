@@ -484,7 +484,7 @@ export function makeAnthropicSiteGenerator(
     let pages: SitePage[] = injectForms(cleaned, spec, descriptor);
     if (opts.images) {
       const tImg = Date.now();
-      pages = await resolveImages(pages, opts.images);
+      pages = await resolveImages(pages, opts.images, spec.id);
       if (metricsOn) console.log('    \u23f1 image_resolution_time: ' + ((Date.now() - tImg) / 1000).toFixed(1) + 's');
     }
     return injectDesignSystem(pages, theme, variant) as SitePage[];

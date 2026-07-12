@@ -35,20 +35,24 @@ function fillTag(tag: string, url: string): string {
     .replace(/<img\b/i, '<img src="' + url + '" loading="lazy"');
 }
 
-export async function resolveImages(pages: readonly SitePage[], images: ImageSource): Promise<SitePage[]> {
+export async function resolveImages(pages: readonly SitePage[], images: ImageSource, ctx?: string): Promise<SitePage[]> {
   const queries = extractImageQueries(pages);
   if (queries.length === 0) return pages.map((p) => ({ ...p }));
 
   const urls = new Map<string, string | null>();
-  await Promise.all(queries.map(async (q) => urls.set(q, await images.search(q))));
+  await Promise.all(queries.map(async (q) => urls.set(q, await images.search(q, ctx))));
 
+  const site = ctx ? ' site="' + ctx + '"' : '';
   return pages.map((p) => {
     IMG_TAG.lastIndex = 0;
     const html = p.html.replace(IMG_TAG, (tag: string, q: string) => {
       const key = (q ?? '').trim();
       if (key.startsWith('user:')) return tag; // foto utente: le materializza assets.ts
       const url = urls.get(key);
-      return url ? fillTag(tag, url) : '';
+      if (url) return fillTag(tag, url);
+      // Slot rimasto senza immagine: log esplicito (mai piu' fallimenti invisibili), poi rimuovo il tag.
+      console.log('  ✗ img slot vuoto' + site + ' query="' + key + '" — tag rimosso');
+      return '';
     });
     return { ...p, html };
   });

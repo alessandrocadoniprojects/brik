@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Brik · CRM prospect</title>
+<style>
+  :root{
+    --bg:#0a0c12; --bg-2:#0e111a; --panel:#12141d; --line:rgba(255,255,255,.09);
+    --ink:#eef1f7; --ink-2:#9aa3b2; --ink-3:#5e7184; --accent:#7c8cff; --accent-2:#5b5bf0;
+    --ok:#3ecf8e; --warn:#f5b95c; --bad:#ff6b6b; --info:#5b8cff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  header{position:sticky;top:0;z-index:5;background:rgba(10,12,18,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:14px 20px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.2px}
+  header .sp{flex:1}
+  .muted{color:var(--ink-2)}
+  .pill{font-size:12px;color:var(--ink-2);background:var(--panel);border:1px solid var(--line);border-radius:100px;padding:4px 10px}
+  input,select,textarea,button{font:inherit;color:var(--ink)}
+  input[type=text],input[type=search],input[type=date],select,textarea{background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  .search{min-width:220px}
+  .toolbar{padding:12px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+  .wrap{padding:0 12px 60px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead th{position:sticky;top:57px;background:var(--bg-2);text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);color:var(--ink-2);font-weight:600;white-space:nowrap;cursor:pointer;user-select:none}
+  thead th.no-sort{cursor:default}
+  tbody td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+  tbody tr:hover{background:rgba(255,255,255,.02)}
+  tr.off{opacity:.5}
+  .name{font-weight:600}
+  .sub{color:var(--ink-3);font-size:12px}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  select.status{border-radius:100px;padding:5px 8px;font-size:12px;font-weight:600}
+  .st-da_contattare{color:var(--ink-2)}
+  .st-contattato{color:var(--info)}
+  .st-interessato{color:var(--warn)}
+  .st-venduto{color:var(--ok)}
+  .st-scaduto{color:var(--bad)}
+  .badge{display:inline-block;font-size:11px;font-weight:700;border-radius:100px;padding:2px 8px;white-space:nowrap}
+  .badge.exp{background:rgba(255,107,107,.14);color:var(--bad);border:1px solid rgba(255,107,107,.35)}
+  .badge.spento{background:rgba(255,255,255,.06);color:var(--ink-2);border:1px solid var(--line)}
+  td.notes textarea{width:100%;min-width:180px;height:40px;resize:vertical}
+  .btn{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap}
+  .btn:hover{border-color:var(--accent)}
+  .btn.on{color:var(--ok)} .btn.off{color:var(--warn)}
+  .actions{display:flex;gap:6px;flex-wrap:wrap}
+  .saved{color:var(--ok);font-size:11px;opacity:0;transition:opacity .2s}
+  .saved.show{opacity:1}
+  .days{font-variant-numeric:tabular-nums}
+  .empty{padding:60px 20px;text-align:center;color:var(--ink-2)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Brik · CRM prospect</h1>
+  <span id="count" class="pill">…</span>
+  <span id="savedFlag" class="saved">salvato ✓</span>
+  <span class="sp"></span>
+  <input id="search" class="search" type="search" placeholder="Cerca nome o città…" autocomplete="off" />
+  <select id="filter">
+    <option value="">Tutti gli stati</option>
+    <option value="da_contattare">Da contattare</option>
+    <option value="contattato">Contattato</option>
+    <option value="interessato">Interessato</option>
+    <option value="venduto">Venduto</option>
+    <option value="scaduto">Scaduto</option>
+    <option value="__expired">⚠︎ Scaduti (&gt;20gg)</option>
+    <option value="__off">Spenti</option>
+  </select>
+  <a class="btn" href="/" target="_blank">← App</a>
+</header>
+
+<div class="wrap">
+  <table>
+    <thead><tr>
+      <th data-sort="name">Attività</th>
+      <th data-sort="city">Città</th>
+      <th data-sort="phone" class="no-sort">Telefono</th>
+      <th data-sort="status">Stato</th>
+      <th data-sort="lastContact">Ultimo contatto</th>
+      <th data-sort="daysLive">Online da</th>
+      <th class="no-sort">Note</th>
+      <th class="no-sort">Azioni</th>
+    </tr></thead>
+    <tbody id="rows"><tr><td colspan="8" class="empty">Caricamento…</td></tr></tbody>
+  </table>
+</div>
+
+<script>
+const STATUSES = ['da_contattare','contattato','interessato','venduto','scaduto'];
+const LABEL = {da_contattare:'Da contattare',contattato:'Contattato',interessato:'Interessato',venduto:'Venduto',scaduto:'Scaduto'};
+let ALL = [];
+let sortKey = 'name', sortDir = 1;
+
+const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $ = (s) => document.querySelector(s);
+
+async function api(method, url, body){
+  const r = await fetch(url, {method, headers:{'content-type':'application/json'}, body: body?JSON.stringify(body):undefined});
+  return r.json().catch(()=>({ok:false}));
+}
+function flashSaved(){ const f=$('#savedFlag'); f.classList.add('show'); setTimeout(()=>f.classList.remove('show'),900); }
+
+async function load(){
+  const r = await api('GET','/api/crm/rows');
+  if(!r.ok){ $('#rows').innerHTML = '<tr><td colspan="8" class="empty">Accesso negato o errore.</td></tr>'; return; }
+  if(!r.ready){ $('#rows').innerHTML = '<tr><td colspan="8" class="empty">CRM non ancora inizializzato (manca data/crm/index.json). Esegui l\'import.</td></tr>'; return; }
+  ALL = r.rows; render();
+}
+
+function currentView(){
+  const q = $('#search').value.trim().toLowerCase();
+  const f = $('#filter').value;
+  let rows = ALL.filter(x=>{
+    if(q && !((x.name||'').toLowerCase().includes(q) || (x.city||'').toLowerCase().includes(q))) return false;
+    if(f==='__expired') return x.expired;
+    if(f==='__off') return x.off;
+    if(f) return x.status===f;
+    return true;
+  });
+  rows.sort((a,b)=>{
+    let A=a[sortKey], B=b[sortKey];
+    if(sortKey==='daysLive'){ A=a.daysLive==null?-1:a.daysLive; B=b.daysLive==null?-1:b.daysLive; return (A-B)*sortDir; }
+    A=(A==null?'':A).toString().toLowerCase(); B=(B==null?'':B).toString().toLowerCase();
+    return A<B?-sortDir:A>B?sortDir:0;
+  });
+  return rows;
+}
+
+function rowHtml(x){
+  const statusSel = '<select class="status st-'+x.status+'" data-slug="'+esc(x.slug)+'" data-field="status">'
+    + STATUSES.map(s=>'<option value="'+s+'"'+(s===x.status?' selected':'')+'>'+LABEL[s]+'</option>').join('') + '</select>';
+  const expBadge = x.expired ? ' <span class="badge exp">scaduto '+x.daysLive+'gg</span>' : '';
+  const offBadge = x.off ? ' <span class="badge spento">spento</span>' : '';
+  const days = x.daysLive==null ? '—' : (x.daysLive+' gg');
+  const editHref = x.projectId ? '/?open='+encodeURIComponent(x.projectId) : '';
+  return '<tr class="'+(x.off?'off':'')+'" data-slug="'+esc(x.slug)+'">'
+    + '<td><div class="name">'+esc(x.name)+offBadge+'</div><div class="sub"><a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.slug)+'</a></div></td>'
+    + '<td>'+esc(x.city)+'</td>'
+    + '<td>'+(x.phone?'<a href="tel:'+esc(x.phone.replace(/\s+/g,''))+'">'+esc(x.phone)+'</a>':'—')+'</td>'
+    + '<td>'+statusSel+'</td>'
+    + '<td><input type="date" data-slug="'+esc(x.slug)+'" data-field="lastContact" value="'+esc(x.lastContact)+'"></td>'
+    + '<td class="days">'+days+expBadge+'</td>'
+    + '<td class="notes"><textarea data-slug="'+esc(x.slug)+'" data-field="notes" placeholder="Note del cliente…">'+esc(x.notes)+'</textarea></td>'
+    + '<td><div class="actions">'
+      + (editHref?'<a class="btn" href="'+editHref+'" target="_blank">Modifica</a>':'<span class="btn" style="opacity:.4">Modifica</span>')
+      + '<a class="btn" href="/offerta?site='+encodeURIComponent(x.slug)+'" target="_blank">Checkout</a>'
+      + '<button class="btn '+(x.off?'off':'on')+'" data-toggle="'+esc(x.slug)+'" data-off="'+(x.off?'1':'0')+'">'+(x.off?'Riaccendi':'Spegni')+'</button>'
+    + '</div></td>'
+  + '</tr>';
+}
+
+function render(){
+  const rows = currentView();
+  const exp = ALL.filter(x=>x.expired).length, off = ALL.filter(x=>x.off).length;
+  $('#count').textContent = rows.length+' / '+ALL.length+' siti · '+exp+' scaduti · '+off+' spenti';
+  $('#rows').innerHTML = rows.length ? rows.map(rowHtml).join('') : '<tr><td colspan="8" class="empty">Nessun risultato.</td></tr>';
+}
+
+// --- eventi ---
+$('#search').addEventListener('input', render);
+$('#filter').addEventListener('change', render);
+document.querySelectorAll('thead th[data-sort]').forEach(th=>{
+  if(th.classList.contains('no-sort')) return;
+  th.addEventListener('click', ()=>{ const k=th.getAttribute('data-sort'); if(sortKey===k) sortDir=-sortDir; else {sortKey=k; sortDir=1;} render(); });
+});
+
+function findRow(slug){ return ALL.find(x=>x.slug===slug); }
+
+// change su status / date (delegato)
+$('#rows').addEventListener('change', async (e)=>{
+  const el = e.target;
+  const slug = el.getAttribute('data-slug'); const field = el.getAttribute('data-field');
+  if(!slug || !field) return;
+  const val = el.value;
+  const r = await api('POST','/api/crm/row/'+encodeURIComponent(slug), {[field]: val});
+  if(r.ok){ const row=findRow(slug); if(row){ row[field]=val; if(field==='status'){ el.className='status st-'+val; // ricalcola expired lato client (grezzo: >20gg e non venduto)
+        row.expired = row.daysLive!=null && row.daysLive>20 && val!=='venduto'; render(); } } flashSaved(); }
+});
+// blur su note
+$('#rows').addEventListener('focusout', async (e)=>{
+  const el = e.target; if(el.tagName!=='TEXTAREA') return;
+  const slug = el.getAttribute('data-slug'); const row=findRow(slug);
+  if(!row || row.notes===el.value) return;
+  const r = await api('POST','/api/crm/row/'+encodeURIComponent(slug), {notes: el.value});
+  if(r.ok){ row.notes = el.value; flashSaved(); }
+});
+// spegni/riaccendi (delegato)
+$('#rows').addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button[data-toggle]'); if(!btn) return;
+  const slug = btn.getAttribute('data-toggle'); const off = btn.getAttribute('data-off')==='1';
+  btn.disabled=true;
+  const r = await api('POST','/api/crm/toggle/'+encodeURIComponent(slug), {off: !off});
+  btn.disabled=false;
+  if(r.ok){ const row=findRow(slug); if(row){ row.off=r.off; render(); } flashSaved(); }
+  else alert((r.error&&r.error.message)||'Errore');
+});
+
+load();
+</script>
+</body>
+</html>

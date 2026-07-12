@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Il tuo nuovo sito è già pronto — Brik</title>
+<meta name="description" content="Il sito del tuo ristorante è già pronto. Se ti piace lo pubblichiamo online. Ci occupiamo noi di tutto. 99€/anno, tutto incluso." />
+<meta property="og:title" content="Il tuo nuovo sito è già pronto" />
+<meta property="og:description" content="Se ti piace lo pubblichiamo online. Ci occupiamo noi di tutto. 99€/anno, tutto incluso." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="icon" type="image/png" href="/favicon.png" />
+<style>
+  :root{
+    --bg:#0a0c12; --bg-2:#0e111a; --card:#12141d; --line:rgba(255,255,255,.08);
+    --ink:#eef1f7; --ink-2:#9aa3b2; --ink-3:#5e7184;
+    --accent:#7c8cff; --accent-soft:rgba(124,140,255,.14);
+    --grad:linear-gradient(135deg,#8b5cf6 0%,#5b8cff 100%);
+    --grad-text:linear-gradient(110deg,#c5bcff 0%,#9bb0ff 50%,#8fd0ff 100%);
+    --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+    --sans:"Plus Jakarta Sans",ui-sans-serif,system-ui,sans-serif;
+    --maxw:1080px; --pad:clamp(20px,5vw,40px);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  svg{display:block}
+  a{color:inherit;text-decoration:none}
+  .wrap{width:100%;max-width:var(--maxw);margin-inline:auto;padding-inline:var(--pad)}
+  h1,h2,h3{font-family:var(--display);font-weight:600;line-height:1.05;letter-spacing:-.02em}
+  .grad{background:var(--grad-text);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .eyebrow{display:inline-flex;align-items:center;gap:.55em;font-family:var(--sans);font-size:.82rem;font-weight:700;letter-spacing:.02em;color:var(--accent)}
+  .eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent)}
+
+  .nav{position:sticky;top:0;z-index:50;background:rgba(10,12,18,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+  .nav .row{display:flex;align-items:center;justify-content:space-between;min-height:66px}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;font-size:1.25rem}
+  .brand .dot{width:26px;height:26px;border-radius:8px;background:var(--grad)}
+  .brand .brand-logo{height:26px;width:auto;display:block}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5em;font-family:var(--sans);font-weight:700;font-size:1rem;padding:.9em 1.5em;border-radius:100px;border:0;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease;white-space:nowrap}
+  .btn.primary{background:var(--grad);color:#fff;box-shadow:0 10px 34px -12px rgba(124,140,255,.7)}
+  .btn.primary:hover{transform:translateY(-2px);box-shadow:0 16px 40px -12px rgba(124,140,255,.85)}
+  .btn.sm{padding:.7em 1.15em;font-size:.92rem}
+  .btn.lg{padding:1.05em 2em;font-size:1.08rem}
+
+  .hero{position:relative;padding:clamp(64px,12vw,120px) 0 clamp(48px,8vw,88px);text-align:center;overflow:hidden}
+  .hero::before{content:"";position:absolute;top:-30%;left:50%;transform:translateX(-50%);width:min(900px,120vw);height:600px;background:radial-gradient(ellipse at center,rgba(124,140,255,.18),transparent 62%);pointer-events:none;z-index:0}
+  .hero>*{position:relative;z-index:1}
+  .hero h1{font-size:clamp(2.5rem,1.4rem+5.2vw,4.6rem);max-width:15ch;margin:1.2rem auto 0}
+  .hero p.sub{font-size:clamp(1.1rem,1rem+.6vw,1.4rem);color:var(--ink-2);max-width:34ch;margin:1.4rem auto 0}
+  .hero .cta-row{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-top:2.2rem}
+  .hero .rea{margin-top:1.4rem;font-size:.92rem;color:var(--ink-3)}
+
+  section{padding-block:clamp(56px,9vw,96px)}
+  .sec-head{text-align:center;max-width:34ch;margin:0 auto clamp(36px,5vw,56px)}
+  .sec-head h2{font-size:clamp(2rem,1.4rem+2.6vw,3.1rem);margin-top:.8rem}
+  .sec-head p{color:var(--ink-2);margin-top:1rem;font-size:1.1rem}
+
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:clamp(24px,3vw,34px);transition:border-color .25s,transform .25s}
+  .card:hover{border-color:rgba(124,140,255,.35);transform:translateY(-3px)}
+  .card .ic{width:46px;height:46px;border-radius:13px;background:var(--accent-soft);display:grid;place-items:center;margin-bottom:1.2rem;color:var(--accent)}
+  .card h3{font-size:1.35rem;margin-bottom:.6rem}
+  .card p{color:var(--ink-2);font-size:1rem}
+
+  .about{max-width:680px;margin:0 auto;text-align:center}
+  .about h2{font-size:clamp(1.9rem,1.3rem+2.4vw,2.9rem);margin-top:.8rem}
+  .about p{color:var(--ink-2);margin-top:1.2rem;font-size:1.12rem;line-height:1.7}
+  .about strong{color:var(--ink);font-weight:700}
+
+  .incl{max-width:760px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:clamp(28px,4vw,44px)}
+  .incl ul{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:.9rem 1.6rem}
+  .incl li{display:flex;align-items:flex-start;gap:.7em;font-size:1.02rem}
+  .incl li svg{flex:none;width:20px;height:20px;color:var(--accent);margin-top:.2em}
+
+  .price-wrap{display:flex;justify-content:center}
+  .price{position:relative;width:min(560px,100%);background:linear-gradient(180deg,#141828,#0e111a);border:1px solid rgba(124,140,255,.32);border-radius:28px;padding:clamp(32px,5vw,52px);text-align:center;box-shadow:0 40px 120px -50px rgba(124,140,255,.55)}
+  .price .tag{display:inline-flex;align-items:center;gap:.5em;font-size:.8rem;font-weight:700;color:var(--accent)}
+  .price .tag::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .price .amount{display:flex;align-items:baseline;justify-content:center;gap:.15em;margin:1rem 0 .2rem}
+  .price .amount .n{font-family:var(--display);font-weight:700;font-size:clamp(4rem,2rem+9vw,6.4rem);line-height:.9;background:var(--grad-text);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .price .amount .per{font-family:var(--sans);font-weight:600;color:var(--ink-2);font-size:1.2rem}
+  .price .note{color:var(--ink-2);margin-bottom:1.8rem}
+  .price .btn{width:100%}
+  .price .fine{margin-top:1rem;font-size:.86rem;color:var(--ink-3)}
+
+  .mods{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .mod{background:var(--bg-2);border:1px solid var(--line);border-radius:18px;padding:26px 24px;display:flex;flex-direction:column;gap:.5rem;transition:border-color .25s,transform .25s}
+  .mod:hover{border-color:rgba(124,140,255,.32);transform:translateY(-3px)}
+  .mod .mh{display:flex;align-items:center;gap:.65em}
+  .mod .mi{width:38px;height:38px;border-radius:11px;background:var(--accent-soft);display:grid;place-items:center;color:var(--accent);flex:none}
+  .mod h3{font-size:1.12rem}
+  .mod p{color:var(--ink-2);font-size:.96rem;flex:1}
+  .mod .pr{font-size:.95rem;font-weight:700;color:var(--accent);padding-top:.5rem;border-top:1px solid var(--line);margin-top:.4rem}
+  .mods-note{text-align:center;color:var(--ink-3);font-size:.95rem;margin-top:1.8rem}
+
+  .change{background:var(--bg-2);border:1px solid var(--line);border-radius:24px;padding:clamp(32px,5vw,56px);text-align:center;max-width:720px;margin:0 auto}
+  .change h2{font-size:clamp(1.7rem,1.3rem+2vw,2.5rem)}
+  .change p{color:var(--ink-2);margin:1rem auto 0;max-width:46ch}
+
+  .faq{max-width:720px;margin:0 auto;display:grid;gap:12px}
+  details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;cursor:pointer}
+  details[open]{border-color:rgba(124,140,255,.3)}
+  summary{font-family:var(--display);font-weight:600;font-size:1.12rem;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:1rem}
+  summary::-webkit-details-marker{display:none}
+  summary::after{content:"+";font-family:var(--sans);font-weight:400;color:var(--accent);font-size:1.5rem;transition:transform .2s}
+  details[open] summary::after{transform:rotate(45deg)}
+  details p{color:var(--ink-2);margin-top:.9rem;font-size:1.02rem}
+
+  footer{border-top:1px solid var(--line);padding-block:40px;color:var(--ink-3)}
+  footer .row{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:center;justify-content:space-between;font-size:.9rem}
+  footer a:hover{color:var(--ink)}
+  footer .links{display:flex;gap:22px;flex-wrap:wrap}
+
+  @media(max-width:820px){.cards,.mods{grid-template-columns:1fr 1fr}}
+  @media(max-width:560px){
+    .cards,.mods{grid-template-columns:1fr}
+    .incl ul{grid-template-columns:1fr}
+    .nav .btn.sm{padding:.6em .9em;font-size:.85rem}
+  }
+  @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap row">
+    <div class="brand"><img class="brand-logo" src="/brik-logo.png" alt="brik" /></div>
+    <a href="#prezzo" class="btn primary sm">Attiva il tuo sito</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>Il tuo nuovo sito è <span class="grad">già pronto</span>.</h1>
+    <p class="sub">Se ti piace la versione che abbiamo preparato, la mettiamo online in pochi minuti.</p>
+    <div class="cta-row">
+      <a href="#prezzo" class="btn primary lg">Attiva il tuo sito</a>
+    </div>
+  </div>
+</header>
+
+<section style="background:var(--bg-2)">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Compreso nel prezzo</span>
+      <h2>Cosa include il tuo sito</h2>
+      <p>Tutto quello che serve a un ristorante per essere online e farsi trovare.</p>
+    </div>
+    <div class="incl">
+      <ul>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Le tue pagine complete</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Menu del ristorante</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Galleria fotografica</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Mappa e indicazioni</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Contatti e telefono</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Orari di apertura</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Il tuo indirizzo web</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Perfetto su smartphone</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Aggiornamenti quando servono</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Sicurezza e assistenza</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="about">
+      <span class="eyebrow">Chi siamo</span>
+      <h2>Un piccolo team italiano</h2>
+      <p>Dietro Brik c'è un gruppo di freelance italiani — sviluppatori e designer — che costruisce siti per ristoranti e attività locali. Ne abbiamo già realizzati <strong>centinaia</strong>: curati, veloci e pensati per farti trovare da chi cerca dove mangiare.</p>
+    </div>
+  </div>
+</section>
+
+<section id="prezzo">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Un solo prezzo</span>
+      <h2>Tutto incluso, nessuna sorpresa</h2>
+    </div>
+    <div class="price-wrap">
+      <div class="price">
+        <span class="tag">Sito attivo</span>
+        <div class="amount"><span class="n">99€</span><span class="per">/ anno</span></div>
+        <p class="note">Un unico prezzo annuale, senza costi nascosti.</p>
+        <button type="button" class="btn primary lg js-attiva">Attiva il tuo sito</button>
+        <p class="fine">Attivazione in pochi minuti dopo il pagamento.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="background:var(--bg-2)">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Quando vuoi</span>
+      <h2>Puoi aggiungere altro</h2>
+      <p>Il sito parte completo. Se in futuro ti serve di più, attivi solo ciò che vuoi.</p>
+    </div>
+    <div class="mods">
+      <div class="mod">
+        <div class="mh">
+          <span class="mi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+          <h3>Prenotazione tavoli</h3>
+        </div>
+        <p>I clienti prenotano un tavolo direttamente dal sito.</p>
+        <span class="pr">su richiesta</span>
+      </div>
+      <div class="mod">
+        <div class="mh">
+          <span class="mi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h5"/></svg></span>
+          <h3>Menu digitale con QR</h3>
+        </div>
+        <p>Un codice QR sul tavolo apre il menu sempre aggiornato.</p>
+        <span class="pr">su richiesta</span>
+      </div>
+      <div class="mod">
+        <div class="mh">
+          <span class="mi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.5 3h2l2.7 13.4a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L23 6H6"/></svg></span>
+          <h3>Ordini da asporto</h3>
+        </div>
+        <p>Ricevi ordini per l'asporto o il delivery online.</p>
+        <span class="pr">su richiesta</span>
+      </div>
+      <div class="mod">
+        <div class="mh">
+          <span class="mi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7Z"/></svg></span>
+          <h3>Recensioni Google</h3>
+        </div>
+        <p>Le migliori recensioni dei clienti mostrate sul sito.</p>
+        <span class="pr">su richiesta</span>
+      </div>
+      <div class="mod">
+        <div class="mh">
+          <span class="mi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="m22 6-10 7L2 6"/></svg></span>
+          <h3>Newsletter e promozioni</h3>
+        </div>
+        <p>Raccogli i contatti e invia offerte ai tuoi clienti.</p>
+        <span class="pr">su richiesta</span>
+      </div>
+      <div class="mod">
+        <div class="mh">
+          <span class="mi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></svg></span>
+          <h3>Altre integrazioni</h3>
+        </div>
+        <p>Hai un'esigenza particolare? Dicci cosa ti serve.</p>
+        <span class="pr">su richiesta</span>
+      </div>
+    </div>
+    <p class="mods-note">I moduli sono opzionali. Puoi attivarli in qualsiasi momento, anche dopo la pubblicazione.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="change">
+      <span class="eyebrow">Personalizzazioni</span>
+      <h2>Vuoi cambiare qualcosa?</h2>
+      <p>La versione che hai visto è già pronta. Se vuoi modificare testi, foto, colori o aggiungere qualcosa, scrivilo nella chat: lo sistemiamo prima di pubblicare.</p>
+    </div>
+  </div>
+</section>
+
+<section style="background:var(--bg-2)">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Domande</span>
+      <h2>Le risposte in breve</h2>
+    </div>
+    <div class="faq">
+      <details><summary>Ci sono altri costi?</summary><p>No. 99€ all'anno, tutto compreso. Nessun costo iniziale e nessun canone nascosto. I moduli extra sono opzionali e li attivi solo se li vuoi.</p></details>
+      <details><summary>Quanto tempo serve?</summary><p>Pochi minuti, se il sito ti piace già così com'è.</p></details>
+      <details><summary>Posso cambiare il menu?</summary><p>Sì, quando vuoi. Ti basta scriverci e lo aggiorniamo noi.</p></details>
+      <details><summary>Posso usare un mio indirizzo web?</summary><p>Sì. Se vuoi un indirizzo tuo ce ne occupiamo noi, è compreso.</p></details>
+      <details><summary>Devo saper usare il computer?</summary><p>No, non serve. Ci pensiamo noi, dall'inizio alla fine.</p></details>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap" style="text-align:center">
+    <h2 style="font-size:clamp(1.9rem,1.3rem+2.4vw,2.9rem)">Il tuo sito è pronto. <span class="grad">Lo mettiamo online?</span></h2>
+    <div class="cta-row" style="display:flex;justify-content:center;margin-top:1.8rem">
+      <button type="button" class="btn primary lg js-attiva">Attiva il tuo sito</button>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap row">
+    <div class="brand" style="font-size:1.05rem"><img class="brand-logo" src="/brik-logo.png" alt="brik" /></div>
+    <div class="links">
+      <a href="mailto:ciao@thebrik.it">Contatti</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/termini">Termini</a>
+      <a href="https://atlantix.io">Atlantix</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var qs = new URLSearchParams(location.search);
+  var slug = (qs.get('site') || '').trim();
+  // Conferma dopo il pagamento (?paid=1 dal success_url di Stripe)
+  if (qs.get('paid') === '1') {
+    var ok = document.createElement('div');
+    ok.style.cssText = 'position:fixed;left:12px;right:12px;top:12px;max-width:560px;margin:0 auto;background:#12341f;color:#d9ffe9;border:1px solid rgba(62,207,142,.4);border-radius:12px;padding:14px 16px;z-index:200;text-align:center;font-weight:600;font-family:var(--sans),system-ui,sans-serif';
+    ok.textContent = 'Grazie! Pagamento ricevuto: attiviamo il tuo sito a breve.';
+    document.body.appendChild(ok);
+  }
+  function attiva(btn) {
+    var label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Un momento…';
+    fetch('/api/offerta/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(slug ? { slug: slug } : {}) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && d.ok && d.url) { location.href = d.url; return; }
+        btn.disabled = false; btn.textContent = label;
+        alert((d && d.error && d.error.message) || 'Checkout non disponibile al momento, riprova.');
+      })
+      .catch(function () { btn.disabled = false; btn.textContent = label; alert('Errore di rete, riprova.'); });
+  }
+  document.querySelectorAll('.js-attiva').forEach(function (el) {
+    el.addEventListener('click', function () { attiva(el); });
+  });
+})();
+</script>
+</body>
+</html>

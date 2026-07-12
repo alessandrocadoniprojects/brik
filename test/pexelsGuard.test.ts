@@ -30,7 +30,7 @@ test('pickCleanPhoto scarta il primo sporco e sceglie il secondo pulito', () => 
     photo('app screenshot interface', 'dirty.jpg'),
     photo('packaging mockup studio detail', 'clean.jpg'),
   ];
-  assert.equal(pickCleanPhoto(photos, 'packaging mockup'), 'clean.jpg');
+  assert.equal(pickCleanPhoto(photos, 'packaging mockup'), 'clean.jpg?auto=compress&cs=tinysrgb&w=1200');
 });
 
 test('pickCleanPhoto torna null se tutti i candidati sono sporchi', () => {
@@ -47,12 +47,12 @@ test('topicalità: scarta un candidato chiaramente fuori tema', () => {
     photo('fresh pizza margherita on table', 'pizza.jpg'),     // fuori tema vs "typography poster"
     photo('typography poster editorial layout', 'poster.jpg'),
   ];
-  assert.equal(pickCleanPhoto(photos, 'typography poster'), 'poster.jpg');
+  assert.equal(pickCleanPhoto(photos, 'typography poster'), 'poster.jpg?auto=compress&cs=tinysrgb&w=1200');
 });
 
 test('topicalità non aggressiva: se manca overlap ma c\'è un solo candidato in tema lo prende', () => {
   const photos: PexelsPhoto[] = [photo('editorial brand identity layout', 'ok.jpg')];
-  assert.equal(pickCleanPhoto(photos, 'brand identity'), 'ok.jpg');
+  assert.equal(pickCleanPhoto(photos, 'brand identity'), 'ok.jpg?auto=compress&cs=tinysrgb&w=1200');
 });
 
 test('cleanImageQuery toglie token vietati/rumorosi mantenendo il soggetto', () => {
@@ -77,7 +77,7 @@ test('search sceglie il primo candidato pulito', async () => {
     'packaging mockup': [photo('app screenshot', 'dirty.jpg'), photo('packaging mockup studio', 'clean.jpg')],
   });
   const src = makePexelsImageSource({ apiKey: 'k', fetchImpl });
-  assert.equal(await src.search('packaging mockup'), 'clean.jpg');
+  assert.equal(await src.search('packaging mockup'), 'clean.jpg?auto=compress&cs=tinysrgb&w=1200');
 });
 
 test('search con tutti sporchi prova il fallback (query ripulita)', async () => {
@@ -86,7 +86,7 @@ test('search con tutti sporchi prova il fallback (query ripulita)', async () => 
     'brand': [photo('brand identity editorial', 'fallback.jpg')], // cleanImageQuery('brand logo') = 'brand'
   });
   const src = makePexelsImageSource({ apiKey: 'k', fetchImpl });
-  assert.equal(await src.search('brand logo'), 'fallback.jpg');
+  assert.equal(await src.search('brand logo'), 'fallback.jpg?auto=compress&cs=tinysrgb&w=1200');
 });
 
 test('search torna null se nemmeno il fallback trova immagini pulite', async () => {

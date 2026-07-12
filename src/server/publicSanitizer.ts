@@ -124,13 +124,27 @@ function unwrapPlaceholderAnchors(html: string): string {
 }
 
 /**
+ * Applica `stripPlaceholders` solo al testo FUORI dai blocchi <style>/<script>.
+ * Quei blocchi contengono CSS/JS, non contenuto: un pattern-segnaposto come
+ * /\bsite-[a-z0-9]{4,}\b/ colpirebbe classi legittime (es. `.site-footer`,
+ * `.site-header`) corrompendo il foglio di stile. Split con gruppo di cattura →
+ * gli indici dispari sono i blocchi codice, che NON vengono toccati.
+ */
+function stripPlaceholdersOutsideCode(html: string): string {
+  const parts = html.split(/(<(?:style|script)\b[^>]*>[\s\S]*?<\/(?:style|script)>)/gi);
+  for (let i = 0; i < parts.length; i += 2) parts[i] = stripPlaceholders(parts[i]!); // solo i segmenti non-codice
+  return parts.join('');
+}
+
+/**
  * Ripulisce l'HTML che va online dai segnaposto comuni. Pura e idempotente:
- * se non ci sono segnaposto, restituisce l'HTML invariato.
+ * se non ci sono segnaposto, restituisce l'HTML invariato. Non tocca CSS/JS
+ * dentro <style>/<script>.
  */
 export function sanitizePublicHtml(html: string): string {
   if (!html) return html;
   let out = unwrapPlaceholderAnchors(html);
-  out = stripPlaceholders(out);
+  out = stripPlaceholdersOutsideCode(out);
   return out;
 }
 

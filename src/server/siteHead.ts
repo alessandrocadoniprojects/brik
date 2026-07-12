@@ -28,7 +28,11 @@ function faviconDataUri(name: string): string {
 }
 
 function firstParagraph(html: string): string {
-  const m = html.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+  // Via script/style prima di cercare il paragrafo: altrimenti `<p[^>]*>` puo'
+  // agganciare frammenti di JS inline (es. `for(...;i<px.length;...)` → `<px...`).
+  // E il tag deve essere un vero <p> (`<p>` o `<p ...>`), non `<px`, `<pre`, ecc.
+  const body = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ');
+  const m = body.match(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/i);
   const raw = m && m[1] ? m[1] : '';
   if (!raw) return '';
   const text = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();

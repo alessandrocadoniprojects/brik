@@ -20,7 +20,7 @@ import Stripe from 'stripe';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { randomBytes, createHash } from 'node:crypto';
-import { readdirSync, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, appendFileSync, statSync } from 'node:fs';
+import { readdirSync, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, appendFileSync, statSync, renameSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
@@ -29,6 +29,9 @@ import { makeAnthropicSiteGenerator } from '../adapters/anthropic/siteGenerator.
 import { injectDesignSystem, deInjectDesignSystem, themeOfPages, isTheme } from '../adapters/anthropic/designSystem.js';
 import { makeCloudflarePagesHost } from '../adapters/hosting/cloudflarePages.js';
 import { makeCloudflarePagesResendHost } from '../adapters/hosting/cloudflarePagesResend.js';
+import { makeLocalHostingHost, subForHost, serveLocalSite, isPublishedSub, sanitizeSub, initLocalHosting, isSubOff, setSubOff, BASE_DOMAIN } from './localHosting.js';
+import { crmRows, updateCrmRow, crmReady, crmIndexEntry } from './crm.js';
+import { FONT_ROUTE_PREFIX, serveFont, optimizePublishedHtml, withPerf } from './perfAssets.js';
 import { makeOwnedFormDelivery } from '../adapters/forms/owned.js';
 import { makePexelsImageSource } from '../adapters/images/pexels.js';
 import { makeAnthropicClassifier } from '../intake/index.js';
@@ -92,6 +95,7 @@ const PORT = Number(process.env.PORT ?? 4321);
 const webDir = fileURLToPath(new URL('../../web/', import.meta.url));
 const dataDir = fileURLToPath(new URL('../../data/sites/', import.meta.url));
 const assetsDir = fileURLToPath(new URL('../../data/assets/', import.meta.url));
+const imagesDir = fileURLToPath(new URL('../../data/images/', import.meta.url)); // foto localizzate (ex-Pexels) servite su /img/<hash>.<ext>
 const ownersDir = fileURLToPath(new URL('../../data/owners/', import.meta.url));
 const conciergeDir = fileURLToPath(new URL('../../data/concierge/', import.meta.url));
 const genDir = fileURLToPath(new URL('../../data/gen/', import.meta.url)); // marker dei job di generazione asincroni
@@ -139,6 +143,14 @@ function pruneChats(): void {
   }
 }
 const OPERATORS = parseOperatorEmails(process.env.OPERATOR_EMAILS); // tu + concierge
+// Un sito è "prospect" (demo non rivendicato) se non ha un owner reale: nessuna email,
+// oppure l'owner è un'email interna — un operatore o l'account batch ale@atlantix.io.
+// In tal caso le pagine legali (privacy/cookie) mostrano testo neutro, senza titolare né
+// email personale. Se il sito è rivendicato da un cliente vero, restano com'erano.
+function isProspectOwner(ownerEmail: string | null | undefined): boolean {
+  const e = (ownerEmail || '').trim().toLowerCase();
+  return !e || e === 'ale@atlantix.io' || isOperator(e, OPERATORS);
+}
 const APP_URL = (process.env.APP_URL || ('http://localhost:' + PORT)).replace(/\/$/, '');
 const COOKIE_SECURE = APP_URL.startsWith('https'); // su localhost (http) il cookie Secure non verrebbe accettato
 const LOGIN_TTL_MS = 15 * 60_000;        // magic link valido 15 minuti
@@ -151,6 +163,11 @@ const DIRECTOR_MIN_SCORE = Number(process.env.DIRECTOR_MIN_SCORE ?? 7); // sogli
 const DIRECTOR_FINALIZE = /^(1|true|yes|on)$/i.test(process.env.DIRECTOR_FINALIZE ?? ''); // rigenerazione creativa al publish: OFF di default (WYSIWYG). Opt-in con DIRECTOR_FINALIZE=on
 const GUEST_MAXAGE_SEC = 30 * 86_400;
 const ANON_GEN_PER_IP_HOUR = Number(process.env.ANON_GEN_PER_IP_HOUR ?? 5); // throttle generazioni anonime per IP/ora (<=0 = nessuno)
+// Payment Link Stripe della landing /offerta (statica): configurabile via env, non hardcoded nel markup.
+const STRIPE_PAYMENT_LINK = process.env.STRIPE_PAYMENT_LINK || '';
+// Offerta prospect: abbonamento 99€/anno (price ricorrente) + destinatario notifiche di vendita.
+const STRIPE_OFFERTA_PRICE_ID = process.env.STRIPE_OFFERTA_PRICE_ID || '';
+const COLLABORATORE_EMAIL = process.env.COLLABORATORE_EMAIL || '';
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY || '';
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 // Prezzi per-account (B3): un price ricorrente per tier -> maxPublished.
@@ -248,6 +265,12 @@ function anonGenAllowed(req: IncomingMessage, now: number = Date.now()): boolean
   return true;
 }
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Destinazione interna sicura per il redirect post-login (magic-link). Anti open-redirect:
+ * accetta solo path assoluti '/…' dello stesso sito (no '//', no schemi, no spazi/control). */
+function safeNextPath(raw: unknown): string {
+  const n = typeof raw === 'string' ? raw.trim() : '';
+  return n.startsWith('/') && !n.startsWith('//') && n.length <= 512 && !/[\s\\]/.test(n) ? n : '';
+}
 
 // --- dipendenze (come la demo) ---
 const llm = makeAnthropicLLM({ apiKey: key });
@@ -797,6 +820,20 @@ async function serveStatic(res: ServerResponse, pathname: string): Promise<boole
     }
     return true;
   }
+  // Landing /offerta: HTML statico ma con il Payment Link Stripe iniettato da env
+  // (placeholder STRIPE_PAYMENT_LINK nel markup → valore di STRIPE_PAYMENT_LINK, '#' se non configurato).
+  if (pathname === '/offerta' || pathname === '/offerta.html') {
+    try {
+      const buf = await readFile(join(webDir, 'offerta.html'));
+      const html = bustAssets(buf.toString('utf8')).replaceAll('STRIPE_PAYMENT_LINK', STRIPE_PAYMENT_LINK || '#');
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(html);
+    } catch {
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('frontend non trovato');
+    }
+    return true;
+  }
   const hit = STATIC[pathname];
   if (!hit) return false;
   try {
@@ -952,7 +989,10 @@ function withOgMeta<T extends { route: string; html: string }>(pages: readonly T
       const headEnd = p.html.search(/<\/head>/i);
       if (headEnd < 0) return p;
       const title = grab(p.html, /<title[^>]*>([\s\S]*?)<\/title>/i) || 'Sito';
-      let desc = grab(p.html, /<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i) || grab(p.html, /<p[^>]*>([\s\S]*?)<\/p>/i);
+      // Fallback dal primo paragrafo: via script/style e vero tag <p> (non `<px`, `<pre`),
+      // altrimenti si pesca il JS inline (es. parallax) invece del testo della pagina.
+      const bodyForDesc = p.html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ');
+      let desc = grab(p.html, /<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i) || grab(bodyForDesc, /<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/i);
       if (desc.length > 160) desc = desc.slice(0, 157).trimEnd() + '…';
       const imgM = p.html.match(/https?:\/\/[^"'()\s]+\.(?:jpe?g|png|webp)/i);
       const img = imgM && imgM[0] ? imgM[0] : '';
@@ -975,7 +1015,7 @@ function withOgMeta<T extends { route: string; html: string }>(pages: readonly T
 
 /** Garanzia anti-scroll-orizzontale iniettata in anteprima e pubblicazione (vale anche per i siti già generati). */
 const GUARD_STYLE =
-  '<style data-brik-guard>html,body{overflow-x:hidden !important;max-width:100%}img,svg,video,iframe,table,pre{max-width:100%}</style>';
+  '<style data-brik-guard>html,body{overflow-x:hidden !important;max-width:100%}img,svg,video,iframe,table,pre{max-width:100%}img{height:auto}</style>';
 function guardHtml(html: string): string {
   if (html.includes('data-brik-guard')) return html;
   const i = html.search(/<\/head>/i);
@@ -1017,6 +1057,134 @@ async function sweepTrials(): Promise<void> {
   pruneChats();
 }
 
+// --- Vendite offerta (Fase 2): fulfillment del webhook checkout.session.completed ---
+const salesDir = fileURLToPath(new URL('../../data/sales/', import.meta.url));
+const salesFile = join(salesDir, 'vendite.json');
+const salesProcessedDir = join(salesDir, 'processed');
+/** Claim atomico per idempotenza: true la PRIMA volta, false se la session è già stata processata. */
+function claimSale(sessionId: string): boolean {
+  const safe = String(sessionId).replace(/[^A-Za-z0-9_-]/g, '');
+  if (!safe) return false;
+  try { mkdirSync(salesProcessedDir, { recursive: true }); } catch {}
+  try { writeFileSync(join(salesProcessedDir, safe + '.json'), new Date().toISOString(), { flag: 'wx' }); return true; }
+  catch { return false; } // EEXIST → già processata
+}
+function appendSale(sale: Record<string, unknown>): void {
+  try {
+    mkdirSync(salesDir, { recursive: true });
+    let arr: unknown[] = [];
+    try { const j = JSON.parse(readFileSync(salesFile, 'utf8')); if (Array.isArray(j)) arr = j; } catch { /* file nuovo */ }
+    arr.push(sale);
+    const tmp = salesFile + '.tmp'; writeFileSync(tmp, JSON.stringify(arr, null, 2)); renameSync(tmp, salesFile);
+  } catch (e) { console.log('  ✗ append vendita', errStr(e)); }
+}
+
+/** Ri-pubblica un sito già online su local hosting (VPS), rigenerando pagine legali/perf ecc.
+ * dai dati ATTUALI (owner/legal). Dopo una vendita → pagine legali coi dati reali del cliente. */
+async function republishLocalSite(id: string): Promise<{ ok: boolean; error?: string; url?: string }> {
+  const pr = await getProject(store, id);
+  if (!pr.ok || !pr.value) return { ok: false, error: 'progetto non trovato' };
+  const projectName = ((pr.value.url || '').match(/https:\/\/([a-z0-9-]+)\.thebrik\.it/i) || [])[1] || '';
+  if (!projectName) return { ok: false, error: 'sito non su local hosting' };
+  const email = readOwnerEmail(id) || '';
+  const baseUrl = `https://${projectName}.${BASE_DOMAIN}`;
+  const legalOpts = { name: publicBusinessName({ title: pr.value.spec ? pr.value.spec.title : null, id, projectName }), email, legal: readLegal(id), prospect: isProspectOwner(email) };
+  const _bp = readBusinessProfile(id);
+  const _pizzaProfile = _bp && _bp.kind === 'pizzeria' ? _bp.data : undefined;
+  const _pizzaSeo = buildPizzeriaLocalSeo(_pizzaProfile, baseUrl);
+  const host = makeLocalHostingHost(projectName);
+  try {
+    const appr = await approveProject(store, id); // publishProject richiede stato 'approved' (come il normale handler)
+    if (!appr.ok) return { ok: false, error: appr.error.message };
+    const r = await withTimeout(
+      publishProject({ store, id, scanner, host, materialize: (pages) => withPerf(withContactLinks(withSiteHead(withVideoFacade(withBlockAssets(withLegal(withGuard(withOgMeta(withPizzeriaSeo(withPublicSanitize(withPizzeriaProfile(assetStore.materialize(pages, id), _pizzaProfile)), _pizzaSeo), baseUrl)), legalOpts))), { name: legalOpts.name }))), trialDays: TRIAL_DAYS }),
+      300_000, 'republish timeout');
+    return r.ok ? { ok: true, ...(r.value.state.url ? { url: r.value.state.url } : {}) } : { ok: false, error: r.error.message };
+  } catch (e) { return { ok: false, error: errStr(e) }; }
+}
+
+/** Fulfillment di una vendita offerta (idempotente). Da checkout.session.completed con metadata.offerta. */
+async function fulfillOffertaSale(cs: Stripe.Checkout.Session): Promise<void> {
+  if (!claimSale(cs.id)) { console.log('  ↺ offerta già processata, skip:', cs.id); return; } // idempotenza
+  // Dati completi del cliente dalla session (retrieve = certezza su address/tax_ids)
+  let sess = cs;
+  try { if (stripe) sess = await stripe.checkout.sessions.retrieve(cs.id); } catch { /* uso l'evento */ }
+  const cd = sess.customer_details;
+  const slug = (sess.metadata && sess.metadata.slug) || '';
+  const email = (cd && cd.email) || sess.customer_email || '';
+  const custName = (cd && cd.name) || '';
+  const phone = (cd && cd.phone) || '';
+  const a = cd && cd.address;
+  const address = a ? [a.line1, a.line2, a.postal_code, a.city, a.state, a.country].filter(Boolean).join(', ') : '';
+  const vat = (cd && cd.tax_ids && cd.tax_ids[0] && cd.tax_ids[0].value) || '';
+  const amount = typeof sess.amount_total === 'number' ? sess.amount_total / 100 : 0;
+  const currency = (sess.currency || 'eur').toUpperCase();
+  const at = new Date().toISOString();
+  const site = slug ? crmIndexEntry(slug) : null;
+  const projectId = site ? site.projectId : '';
+  const localName = site ? site.name : '';
+
+  // a) CRM → venduto
+  if (slug) { try { updateCrmRow(slug, { status: 'venduto' }); } catch (e) { console.log('  ✗ crm venduto', errStr(e)); } }
+
+  // b) owner reale + dati legali del cliente  → c) ripubblica (pagine legali coi dati veri)
+  let republishNote = 'nessun progetto (slug non collegato a un sito)';
+  let republishOk = false;
+  if (projectId) {
+    if (email) writeOwnerEmail(projectId, email);
+    const legal: LegalData = {};
+    if (custName) { legal.legalName = custName; legal.ownerName = custName; }
+    if (vat) legal.vat = vat;
+    if (address) legal.address = address;
+    if (email) legal.privacyEmail = email;
+    if (phone) legal.phone = phone;
+    writeLegal(projectId, legal);
+    // Il cliente HA pagato: le pagine legali DEVONO passare da neutre a reali. Ritento (3x, backoff)
+    // prima di arrendermi; se fallisce comunque, l'email avvisa che serve un intervento manuale.
+    let lastErr = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const rep = await republishLocalSite(projectId);
+      if (rep.ok) { republishOk = true; break; }
+      lastErr = rep.error || 'errore';
+      console.log('  ⚠ offerta republish tentativo ' + attempt + '/3 FALLITO:', lastErr);
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 2000 * attempt));
+    }
+    republishNote = republishOk ? 'ok' : 'FALLITO dopo 3 tentativi: ' + lastErr;
+    console.log('  offerta republish', projectId, republishNote);
+  }
+  const needsManual = !!projectId && !republishOk; // pagato ma pagine legali non aggiornate → intervento manuale
+
+  // d) notifica al collaboratore (con ALERT prominente se la ripubblicazione è fallita → intervento manuale)
+  if (COLLABORATORE_EMAIL) {
+    const alert = needsManual
+      ? '<div style="background:#7a1e1e;color:#ffecec;padding:14px 16px;border-radius:10px;margin:0 0 16px;font-size:15px;line-height:1.5">'
+        + '<b>⚠️ INTERVENTO MANUALE RICHIESTO</b><br>'
+        + 'La ripubblicazione automatica del sito è <b>FALLITA</b> (' + esc(republishNote) + ').<br>'
+        + 'Il cliente <b>ha pagato</b> ma le sue pagine legali sono ancora quelle demo (&ldquo;sito dimostrativo, non ancora attivo&rdquo;).<br>'
+        + '<b>Azione:</b> apri il sito <b>' + esc(slug) + '</b> nell&rsquo;editor e <b>ripubblicalo</b> a mano appena possibile (i dati cliente sono già salvati: basta ripubblicare).'
+        + '</div>'
+      : '';
+    const html = alert
+      + '<h2>Nuova vendita Brik</h2>'
+      + '<p><b>Locale:</b> ' + esc(localName || slug || '?') + '<br>'
+      + '<b>Sito:</b> <a href="https://' + esc(slug) + '.thebrik.it">' + esc(slug) + '.thebrik.it</a> · slug <code>' + esc(slug) + '</code></p>'
+      + '<h3>Cliente</h3><ul>'
+      + '<li><b>Nome/Ragione sociale:</b> ' + esc(custName || '—') + '</li>'
+      + '<li><b>Email:</b> ' + esc(email || '—') + '</li>'
+      + '<li><b>Telefono:</b> ' + esc(phone || '—') + '</li>'
+      + '<li><b>P.IVA/CF:</b> ' + esc(vat || '—') + '</li>'
+      + '<li><b>Indirizzo:</b> ' + esc(address || '—') + '</li></ul>'
+      + '<p><b>Importo:</b> ' + amount + ' ' + esc(currency) + ' /anno · <b>Data:</b> ' + esc(at) + '</p>'
+      + '<p style="color:#888;font-size:12px">Ripubblicazione sito: ' + esc(republishNote) + ' · session ' + esc(cs.id) + '</p>';
+    const subject = (needsManual ? '⚠️ INTERVENTO RICHIESTO · ' : '') + 'Vendita Brik: ' + (localName || slug || custName || 'nuovo cliente');
+    void sendEmail(COLLABORATORE_EMAIL, subject, html);
+  }
+
+  // e) registro vendita
+  appendSale({ at, sessionId: cs.id, slug, projectId, localName, email, name: custName, phone, vat, address, amount, currency, republish: republishNote });
+  console.log('  ✓ offerta VENDUTA:', slug || '(no slug)', '·', email, '·', amount + currency);
+}
+
 // --- routing ---
 const server = createServer(async (req, res) => {
   try {
@@ -1025,6 +1193,120 @@ const server = createServer(async (req, res) => {
     const path = url.pathname;
     if (!path.startsWith('/preview/') && !STATIC[path]) {
       console.log(new Date().toISOString().slice(11, 19), method, path);
+    }
+
+    // ----- CADDY on-demand TLS: autorizza il certificato solo per il sito principale
+    // e per i sottodomini prospect effettivamente pubblicati localmente (mai domini arbitrari).
+    if (path === '/internal/tls-ask') {
+      const domain = (url.searchParams.get('domain') || '').toLowerCase().replace(/\.$/, '');
+      const suffix = '.' + BASE_DOMAIN;
+      const allow = domain === BASE_DOMAIN || (domain.endsWith(suffix) && isPublishedSub(domain.slice(0, -suffix.length)));
+      res.writeHead(allow ? 200 : 404);
+      res.end();
+      return;
+    }
+
+    // ----- FONT CONDIVISI: serviti a tutti gli host (sito principale, sottodomini
+    // prospect, cross-origin dai siti su Pages) con cache immutabile e CORS aperto.
+    // I woff2 non cambiano mai a parità di nome (hash nel filename), quindi max-age lungo.
+    if (method === 'GET' && path.startsWith(FONT_ROUTE_PREFIX)) {
+      const bytes = serveFont(path);
+      if (bytes) {
+        res.writeHead(200, {
+          'content-type': 'font/woff2',
+          'cache-control': 'public, max-age=31536000, immutable',
+          'access-control-allow-origin': '*',
+          'cross-origin-resource-policy': 'cross-origin',
+        });
+        res.end(bytes);
+      } else {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('font not found');
+      }
+      return;
+    }
+
+    // ----- FOTO LOCALIZZATE (ex-Pexels): /img/<hash>.<ext> da data/images/, servite a
+    // TUTTI gli host (come i font) così i siti prospect su <sub>.thebrik.it possono usare
+    // un src relativo "/img/...". Nome = hash del contenuto → immutabile, cache lunga.
+    // Nome validato (esadecimale + estensione nota) → niente path traversal.
+    if (method === 'GET' && path.startsWith('/img/')) {
+      const m = path.match(/^\/img\/([a-f0-9]{8,64}\.(jpg|jpeg|png|webp|gif))$/);
+      if (m) {
+        const ext = m[2]!;
+        const type = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
+        try {
+          const bytes = await readFile(join(imagesDir, m[1]!));
+          res.writeHead(200, {
+            'content-type': type,
+            'cache-control': 'public, max-age=31536000, immutable',
+            'access-control-allow-origin': '*',
+            'cross-origin-resource-policy': 'cross-origin',
+          });
+          res.end(bytes);
+          return;
+        } catch { /* file assente → 404 sotto */ }
+      }
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      res.end('immagine non trovata');
+      return;
+    }
+
+    // ----- LOCAL HOSTING: Host == <sub>.thebrik.it pubblicato → servi il sito prospect
+    // dal VPS (byte pubblicati, stessi di Pages). Il sito principale (thebrik.it) e i
+    // sottodomini non in mappa (www, relievo…) NON entrano qui e restano l'app builder.
+    if (method === 'GET') {
+      const sub = subForHost(req.headers.host ?? '');
+      if (sub) {
+        // Sito spento dal CRM: file su disco intatti, ma non servito → pagina "non disponibile" (404).
+        if (isSubOff(sub)) {
+          res.writeHead(404, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+          res.end('<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sito non disponibile</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0c12;color:#eef1f7;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}.b{text-align:center;padding:32px;max-width:420px}.b h1{font-size:1.4rem;margin:0 0 10px}.b p{color:#9aa3b2;line-height:1.6;margin:0}</style></head><body><div class="b"><h1>Sito non disponibile</h1><p>Questa pagina non è al momento raggiungibile.</p></div></body></html>');
+          return;
+        }
+        const html = await serveLocalSite(sub, path);
+        if (html !== null) {
+          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+          res.end(html);
+        } else {
+          res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' });
+          res.end('<!doctype html><meta charset="utf-8"><p>Pagina non trovata.</p>');
+        }
+        return;
+      }
+    }
+
+    // ----- CRM interno (solo operatori): pagina protetta /crm + API /api/crm/*. Solo host principale. -----
+    if (path === '/crm' && method === 'GET') {
+      const me = sessionUserOf(req);
+      if (!me || !me.isOperator) { res.writeHead(302, { Location: '/?login=1&next=%2Fcrm' }); res.end(); return; }
+      try {
+        const buf = await readFile(join(webDir, 'crm.html'));
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+        res.end(bustAssets(buf.toString('utf8')));
+      } catch { res.writeHead(500, { 'content-type': 'text/plain' }); res.end('crm non trovato'); }
+      return;
+    }
+    if (path.startsWith('/api/crm/')) {
+      const me = sessionUserOf(req);
+      if (!me || !me.isOperator) return sendJson(res, 403, { ok: false, error: { code: 'FORBIDDEN', message: 'Solo operatori.' } });
+      if (path === '/api/crm/rows' && method === 'GET') {
+        return sendJson(res, 200, { ok: true, ready: crmReady(), rows: crmReady() ? crmRows() : [] });
+      }
+      const mRow = path.match(/^\/api\/crm\/row\/([a-z0-9-]{1,80})$/);
+      if (mRow && method === 'POST') {
+        const body = await readJsonBody(req);
+        const done = updateCrmRow(mRow[1]!, { status: body.status, lastContact: body.lastContact, notes: body.notes });
+        return done ? sendJson(res, 200, { ok: true }) : sendJson(res, 400, { ok: false, error: { code: 'BAD_UPDATE', message: 'Aggiornamento non valido.' } });
+      }
+      const mTog = path.match(/^\/api\/crm\/toggle\/([a-z0-9-]{1,80})$/);
+      if (mTog && method === 'POST') {
+        const body = await readJsonBody(req);
+        const off = !!body.off;
+        const done = setSubOff(mTog[1]!, off);
+        return done ? sendJson(res, 200, { ok: true, off }) : sendJson(res, 404, { ok: false, error: { code: 'NOT_PUBLISHED', message: 'Sito non in hosting locale.' } });
+      }
+      return sendJson(res, 404, { ok: false, error: { code: 'NOT_FOUND', message: 'Endpoint CRM inesistente.' } });
     }
 
     if (method === 'GET' && (path === '/' || path === '/index.html')) {
@@ -1109,7 +1391,7 @@ const server = createServer(async (req, res) => {
       const html = page.html.includes('data-brik-img="user:')
         ? (assetStore.materialize([{ route: page.route, html: page.html }], id)[0]?.html ?? page.html)
         : page.html;
-      res.end(prefixInternalLinks(linkifyContacts(injectVideoFacade(injectBlockAssets(guardHtml(html)))), '/preview/' + id));
+      res.end(prefixInternalLinks(linkifyContacts(injectVideoFacade(injectBlockAssets(guardHtml(optimizePublishedHtml(html))))), '/preview/' + id));
       return;
     }
 
@@ -1331,7 +1613,8 @@ const server = createServer(async (req, res) => {
         const g = gid ? authStore.getGuest(gid) : null;
         if (g && g.projectIds.length) authStore.setPendingClaim(token, g.projectIds);
       }
-      const link = APP_URL + '/api/auth/verify?token=' + token;
+      const nextParam = safeNextPath(body.next); // destinazione post-login (es. /crm), preservata nel link
+      const link = APP_URL + '/api/auth/verify?token=' + token + (nextParam ? '&next=' + encodeURIComponent(nextParam) : '');
       const logo = APP_URL + '/brik-logo-email.png';
       const html = `<!doctype html>
 <html lang="it">
@@ -1400,7 +1683,12 @@ const server = createServer(async (req, res) => {
       const claimedProjectId = claimedProjectIds.length
         ? claimedProjectIds[claimedProjectIds.length - 1]
         : '';
-      const redirectLocation = claimedProjectId
+      // Preserva la destinazione richiesta prima del login (es. /crm); altrimenti il progetto
+      // reclamato (flusso ospite), altrimenti la home.
+      const nextParam = safeNextPath(url.searchParams.get('next'));
+      const redirectLocation = nextParam
+        ? nextParam
+        : claimedProjectId
         ? '/?site=' + encodeURIComponent(claimedProjectId)
         : '/';
       res.writeHead(302, { Location: redirectLocation, 'Set-Cookie': cookies });
@@ -1522,6 +1810,38 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, images, configured: !!PEXELS_KEY });
     }
 
+    // Checkout dell'offerta prospect (landing /offerta): abbonamento 99€/anno per UN sito.
+    // Pubblico (lo chiama la landing). Raccoglie obbligatoriamente nome, email, telefono,
+    // indirizzo di fatturazione e P.IVA/CF (servono per fatturare e per le pagine legali).
+    // Lo `slug` del sito (da /offerta?site=<slug>) viaggia nei metadata → il webhook (Fase 2)
+    // collega la vendita al progetto giusto. La firma/consumo del webhook è la Fase 2.
+    if (path === '/api/offerta/checkout' && method === 'POST') {
+      if (!stripe || !STRIPE_OFFERTA_PRICE_ID) return sendJson(res, 503, { ok: false, error: { code: 'STRIPE_OFF', message: 'Checkout non disponibile al momento.' } });
+      const body = await readJsonBody(req);
+      const raw = typeof body.slug === 'string' ? sanitizeSub(body.slug.trim()) : '';
+      const slug = raw && isPublishedSub(raw) ? raw : ''; // includo lo slug solo se è un sito prospect reale
+      const meta = { offerta: '1', ...(slug ? { slug } : {}) };
+      try {
+        const session = await stripe.checkout.sessions.create({
+          mode: 'subscription',
+          line_items: [{ price: STRIPE_OFFERTA_PRICE_ID, quantity: 1 }],
+          billing_address_collection: 'required',
+          phone_number_collection: { enabled: true },
+          tax_id_collection: { enabled: true },
+          allow_promotion_codes: true,
+          metadata: meta,
+          subscription_data: { metadata: meta },
+          success_url: APP_URL + '/offerta?paid=1' + (slug ? '&site=' + encodeURIComponent(slug) : ''),
+          cancel_url: APP_URL + '/offerta' + (slug ? '?site=' + encodeURIComponent(slug) : ''),
+        });
+        console.log('  → offerta checkout creato' + (slug ? ' · sito ' + slug : ' · senza sito'));
+        return sendJson(res, 200, { ok: true, url: session.url });
+      } catch (e) {
+        console.log('  ✗ offerta checkout', slug || '-', errStr(e));
+        return sendJson(res, 400, { ok: false, error: { code: 'STRIPE_ERROR', message: errStr(e) } });
+      }
+    }
+
     // Webhook Stripe: firmato (raw body), nessuna auth. Attiva/disattiva il sito.
     if (path === '/api/stripe/webhook' && method === 'POST') {
       if (!stripe || !STRIPE_WEBHOOK_SECRET) { res.writeHead(503); res.end('stripe off'); return; }
@@ -1541,6 +1861,8 @@ const server = createServer(async (req, res) => {
           const _em = (cs.customer_details && cs.customer_details.email) || cs.customer_email || '';
           void sendMetaCapi('Purchase', { ...(_amt != null ? { value: _amt } : {}), currency: (cs.currency || 'eur').toUpperCase(), eventId: 'purchase_' + cs.id, ...(_em ? { email: _em } : {}) });
           console.log('  ✓ stripe: checkout completato ->', _em || '(email mancante)');
+          // Fase 2: vendita offerta prospect → fulfillment idempotente (CRM venduto, owner reale, republish, notifica, registro).
+          if (cs.metadata && cs.metadata.offerta === '1') await fulfillOffertaSale(cs);
         } else if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
           const sub = event.data.object as Stripe.Subscription;
           const email = (sub.metadata && sub.metadata.email) || '';
@@ -2124,6 +2446,8 @@ const server = createServer(async (req, res) => {
         const pubEmail = typeof pubBody.email === 'string' ? pubBody.email.trim() : '';
         if (pubEmail && EMAIL_RE.test(pubEmail)) writeOwnerEmail(id, pubEmail);
         const subdomain = typeof pubBody.subdomain === 'string' ? pubBody.subdomain.trim() : '';
+        // Local hosting: prospect su <sub>.thebrik.it serviti dal VPS (salta wrangler).
+        const explicitLocal = typeof pubBody.hosting === 'string' && pubBody.hosting.trim().toLowerCase() === 'local';
         const email = readOwnerEmail(id);
         const deliveryActive = !!(email && RESEND_KEY);
 
@@ -2133,9 +2457,16 @@ const server = createServer(async (req, res) => {
         // Sottodominio esplicito (prima pubblicazione o cambio da Impostazioni) vince;
         // altrimenti riusa quello gia pubblicato, infine l'id come fallback.
         const already = (pre.value.url || '').match(/https:\/\/([a-z0-9-]+)\.pages\.dev/i);
-        const projectName = subdomain || already?.[1] || pre.value.id;
+        // Un sito già online su *.thebrik.it (hosting locale) si ri-pubblica sullo STESSO host locale,
+        // anche se l'editor non passa hosting:'local' → le modifiche vanno sul VPS, non su Cloudflare.
+        const alreadyLocalSub = ((pre.value.url || '').match(/https:\/\/([a-z0-9-]+)\.thebrik\.it/i) || [])[1] || '';
+        const useLocal = explicitLocal || !!alreadyLocalSub;
+        const localSub = useLocal ? sanitizeSub(subdomain || alreadyLocalSub || pre.value.id) : '';
+        const projectName = useLocal ? localSub : (subdomain || already?.[1] || pre.value.id);
 
-        const host = deliveryActive
+        const host = useLocal
+          ? makeLocalHostingHost(localSub)
+          : deliveryActive
           ? makeCloudflarePagesResendHost({ ownerEmail: email as string, resendKey: RESEND_KEY, projectName, ...(RESEND_FROM ? { resendFrom: RESEND_FROM } : {}) })
           : makeCloudflarePagesHost({ projectName });
         // Un sito in pausa non si ripubblica dal flusso normale: va riattivato (unlock).
@@ -2212,15 +2543,15 @@ const server = createServer(async (req, res) => {
         try {
           await finalizeProject({ store, id, llm, generator, runQa, reviewMinScore: DIRECTOR_MIN_SCORE, enabled: DIRECTOR_REVIEW && DIRECTOR_FINALIZE });
         } catch (e) { console.log('  \u{1F3AC} fallback_to_preview: finalizzazione saltata —', errStr(e)); }
-        console.log('  → publish: scan + deploy su Cloudflare… (sottodominio: ' + projectName + ', recapito form: ' + (deliveryActive ? 'attivo' : 'NON attivo') + ')');
+        console.log('  → publish: scan + deploy su ' + (useLocal ? 'VPS *.' + BASE_DOMAIN : 'Cloudflare') + '… (sottodominio: ' + projectName + ', recapito form: ' + (deliveryActive ? 'attivo' : 'NON attivo') + ')');
         const t0 = Date.now();
-        const baseUrl = `https://${projectName}.pages.dev`;
-        const legalOpts = { name: publicBusinessName({ title: pre.value && pre.value.spec ? pre.value.spec.title : null, id, projectName }), email: (email as string) || '', legal: readLegal(id) };
+        const baseUrl = useLocal ? `https://${projectName}.${BASE_DOMAIN}` : `https://${projectName}.pages.dev`;
+        const legalOpts = { name: publicBusinessName({ title: pre.value && pre.value.spec ? pre.value.spec.title : null, id, projectName }), email: (email as string) || '', legal: readLegal(id), prospect: isProspectOwner(email) };
         const _bp = readBusinessProfile(id);
         const _pizzaProfile = _bp && _bp.kind === 'pizzeria' ? _bp.data : undefined;
         const _pizzaSeo = buildPizzeriaLocalSeo(_pizzaProfile, baseUrl);
         const r = await withTimeout(
-          publishProject({ store, id, scanner, host, materialize: (pages) => withContactLinks(withSiteHead(withVideoFacade(withBlockAssets(withLegal(withGuard(withOgMeta(withPizzeriaSeo(withPublicSanitize(withPizzeriaProfile(assetStore.materialize(pages, id), _pizzaProfile)), _pizzaSeo), baseUrl)), legalOpts))), { name: legalOpts.name })), trialDays: TRIAL_DAYS }),
+          publishProject({ store, id, scanner, host, materialize: (pages) => withPerf(withContactLinks(withSiteHead(withVideoFacade(withBlockAssets(withLegal(withGuard(withOgMeta(withPizzeriaSeo(withPublicSanitize(withPizzeriaProfile(assetStore.materialize(pages, id), _pizzaProfile)), _pizzaSeo), baseUrl)), legalOpts))), { name: legalOpts.name }))), trialDays: TRIAL_DAYS }),
           300_000,
           'La pubblicazione ha superato il tempo massimo ed e stata interrotta.',
         );
@@ -2259,6 +2590,7 @@ server.listen(PORT, () => {
   console.log('Recapito form: ' + (process.env.RESEND_API_KEY ? 'attivo (Resend) — from: ' + (RESEND_FROM ?? 'onboarding@resend.dev') : 'NON configurato (imposta RESEND_API_KEY; senza, il sito pubblicato non recapita i messaggi)'));
   console.log('Immagini: ' + (process.env.PEXELS_API_KEY ? 'attive (Pexels)' : 'NON configurate (imposta PEXELS_API_KEY; senza, i siti escono senza foto)'));
   console.log('Hosting: ' + (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID ? 'Cloudflare Pages' : 'NON configurato (publish dara errore finche non imposti le chiavi)'));
+  console.log('Local hosting: ' + initLocalHosting() + ' sito/i prospect su *.' + BASE_DOMAIN + ' (publish con hosting:"local")');
   console.log('Concierge: ' + (process.env.CONCIERGE_EMAIL ? 'richieste dominio → ' + process.env.CONCIERGE_EMAIL : 'CONCIERGE_EMAIL non impostata nel .env — le email andrebbero a ' + (CONCIERGE_EMAIL || 'nessun indirizzo') + ' (impostala su una casella che leggi davvero)'));
   console.log('Gating: prova ' + TRIAL_DAYS + ' giorni o ' + (EDIT_CAP > 0 ? EDIT_CAP + '' : 'infinite') + ' modifiche, poi lock' + (CF_READY && SWEEP_MINUTES > 0 ? ' (controllo ogni ' + SWEEP_MINUTES + ' min)' : ' (controllo OFF: Cloudflare non configurato)') + (ADMIN_TOKEN ? '' : ' — ADMIN_TOKEN non impostato: riattivazione disabilitata'));
   console.log('Auth: login via email · ' + (OPERATORS.size ? OPERATORS.size + ' operatore/i' : 'nessun operatore (imposta OPERATOR_EMAILS)') + ' · ' + (AUTH_REQUIRED ? 'enforcement ON (login obbligatorio, siti per utente)' : 'enforcement OFF') + (ANON_TRIAL ? ' · prova-ospite ON (1 generazione + 1 modifica, poi login)' : '') + ' · base ' + APP_URL);

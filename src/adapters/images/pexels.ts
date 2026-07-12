@@ -16,8 +16,8 @@
  * Licenza Pexels: uso libero, attribuzione non obbligatoria.
  */
 export interface ImageSource {
-  /** Restituisce l'URL di una foto pertinente e pulita, o null se non disponibile. */
-  search(query: string): Promise<string | null>;
+  /** Restituisce l'URL di una foto pertinente e pulita, o null se non disponibile. `ctx` (facoltativo) e' un'etichetta del sito, usata solo nei log. */
+  search(query: string, ctx?: string): Promise<string | null>;
 }
 
 /** Candidato Pexels con i metadati che ci servono per filtrare. */
@@ -33,9 +33,43 @@ interface PexelsResponse {
   readonly photos?: readonly PexelsPhoto[];
 }
 
-type FetchLike = (input: string, init?: { headers?: Record<string, string> }) => Promise<{ ok: boolean; json: () => Promise<unknown> }>;
+type FetchLike = (input: string, init?: { headers?: Record<string, string> }) => Promise<{ ok: boolean; status?: number; json: () => Promise<unknown> }>;
 
 const CANDIDATES = 14;
+
+// --- Rate limit / retry verso Pexels (quota free: ~200 richieste/ora) ---
+// Tutte le chiamate passano da un limiter condiviso che tiene il ritmo sotto la
+// quota; sul 429 si ritenta con backoff esponenziale. Configurabili via env.
+const PEXELS_MAX_PER_HOUR = Number(process.env.PEXELS_MAX_PER_HOUR ?? 180); // < 200 di quota
+const RETRY_ATTEMPTS = Math.max(1, Number(process.env.PEXELS_RETRY_ATTEMPTS ?? 3));
+const PEXELS_BACKOFF_MS = Number(process.env.PEXELS_BACKOFF_MS ?? 1000); // base backoff: 1s, 2s, 4s...
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Limiter a finestra scorrevole: al massimo `maxPerHour` esecuzioni per ogni
+ * finestra `windowMs`, con acquisizione degli slot serializzata (niente race sui
+ * timestamp). Le esecuzioni possono comunque sovrapporsi una volta ottenuto lo
+ * slot. Esportato per il riuso da script esterni (es. lo script di re-fill).
+ */
+export function makeRateLimiter(maxPerHour: number, windowMs = 3_600_000): <T>(fn: () => Promise<T>) => Promise<T> {
+  const stamps: number[] = [];
+  let tail: Promise<void> = Promise.resolve();
+  return function schedule<T>(fn: () => Promise<T>): Promise<T> {
+    const slot = tail.then(async () => {
+      for (;;) {
+        const now = Date.now();
+        while (stamps.length && now - stamps[0]! >= windowMs) stamps.shift();
+        if (stamps.length < maxPerHour) { stamps.push(now); return; }
+        await sleep(windowMs - (now - stamps[0]!) + 50);
+      }
+    });
+    tail = slot.then(() => undefined, () => undefined);
+    return slot.then(() => fn());
+  };
+}
+
+// Limiter condiviso da tutte le ImageSource Pexels del processo (un solo budget/ora).
+const pexelsLimiter = makeRateLimiter(PEXELS_MAX_PER_HOUR);
 
 // Token/frasi vietati: se compaiono in alt o nello slug dell'url, scarto il candidato.
 // "logo" è volutamente incluso: può scartare immagini valide per query creative, ma
@@ -89,7 +123,10 @@ function isOffTopic(photo: PexelsPhoto, query: string): boolean {
 }
 
 function bestSrc(photo: PexelsPhoto): string | null {
-  return photo.src?.landscape ?? photo.src?.large ?? photo.src?.medium ?? photo.src?.original ?? null;
+  const raw = photo.src?.landscape ?? photo.src?.large ?? photo.src?.medium ?? photo.src?.original ?? null;
+  if (!raw) return null;
+  const base = raw.split("?")[0];
+  return base + "?auto=compress&cs=tinysrgb&w=1200";
 }
 
 /**
@@ -128,34 +165,69 @@ export function makePexelsImageSource(opts: { readonly apiKey?: string; readonly
   const key = opts.apiKey ?? process.env.PEXELS_API_KEY;
   const doFetch: FetchLike = opts.fetchImpl ?? ((input, init) => fetch(input, init) as unknown as Promise<{ ok: boolean; json: () => Promise<unknown> }>);
 
-  async function candidates(query: string): Promise<PexelsPhoto[]> {
+  /**
+   * Scarica i candidati per una query. Distingue i tre esiti che prima
+   * collassavano tutti in [] silenzioso: successo, 429 (rate limit) e altro-errore.
+   * Ogni chiamata passa dal rate limiter condiviso; sul 429 ritenta con backoff
+   * esponenziale. Ogni fallimento e' loggato su stdout.
+   */
+  async function candidates(query: string): Promise<{ photos: PexelsPhoto[]; rateLimited: boolean }> {
     const q = query.trim();
-    if (!key || !q) return [];
-    try {
-      const url = 'https://api.pexels.com/v1/search?per_page=' + CANDIDATES + '&orientation=landscape&query=' + encodeURIComponent(q);
-      const res = await doFetch(url, { headers: { Authorization: key } });
-      if (!res.ok) return [];
-      const data = (await res.json()) as PexelsResponse;
-      return Array.isArray(data.photos) ? [...data.photos] : [];
-    } catch {
-      return [];
+    if (!key || !q) return { photos: [], rateLimited: false };
+    const url = 'https://api.pexels.com/v1/search?per_page=' + CANDIDATES + '&orientation=landscape&query=' + encodeURIComponent(q);
+    for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
+      let res: { ok: boolean; status?: number; json: () => Promise<unknown> };
+      try {
+        res = await pexelsLimiter(() => doFetch(url, { headers: { Authorization: key! } }));
+      } catch (e) {
+        console.log('  ✗ pexels fetch error query="' + q + '": ' + (e instanceof Error ? e.message : String(e)));
+        return { photos: [], rateLimited: false };
+      }
+      if (res.status === 429) {
+        if (attempt < RETRY_ATTEMPTS) {
+          const backoff = PEXELS_BACKOFF_MS * Math.pow(2, attempt - 1); // 1s, 2s, 4s...
+          console.log('  ⏳ pexels 429 query="' + q + '" tentativo ' + attempt + '/' + RETRY_ATTEMPTS + ', attendo ' + backoff + 'ms');
+          await sleep(backoff);
+          continue;
+        }
+        console.log('  ✗ pexels 429 query="' + q + '": esauriti ' + RETRY_ATTEMPTS + ' tentativi');
+        return { photos: [], rateLimited: true };
+      }
+      if (!res.ok) {
+        console.log('  ✗ pexels HTTP ' + (res.status ?? '?') + ' query="' + q + '"');
+        return { photos: [], rateLimited: false };
+      }
+      try {
+        const data = (await res.json()) as PexelsResponse;
+        return { photos: Array.isArray(data.photos) ? [...data.photos] : [], rateLimited: false };
+      } catch {
+        console.log('  ✗ pexels JSON invalido query="' + q + '"');
+        return { photos: [], rateLimited: false };
+      }
     }
+    return { photos: [], rateLimited: true };
   }
 
   return {
-    async search(query: string): Promise<string | null> {
+    async search(query: string, ctx?: string): Promise<string | null> {
       const q = query.trim();
       if (!key || !q) return null;
       // 1) candidati per la query originale → primo pulito e in tema.
-      const first = pickCleanPhoto(await candidates(q), q);
+      const r1 = await candidates(q);
+      const first = pickCleanPhoto(r1.photos, q);
       if (first) return first;
-      // 2) fallback con query ripulita (se diversa).
+      // 2) fallback con query ripulita (se diversa e se non gia' rate-limited: inutile insistere sul 429).
+      let rateLimited = r1.rateLimited;
       const fb = cleanImageQuery(q);
-      if (fb && fb.toLowerCase() !== q.toLowerCase()) {
-        const second = pickCleanPhoto(await candidates(fb), fb);
+      if (!rateLimited && fb && fb.toLowerCase() !== q.toLowerCase()) {
+        const r2 = await candidates(fb);
+        const second = pickCleanPhoto(r2.photos, fb);
         if (second) return second;
+        rateLimited = r2.rateLimited;
       }
-      // 3) niente di pulito: meglio nessuna immagine (images.ts rimuove il tag).
+      // 3) niente di pulito: log del motivo, poi null (images.ts rimuove il tag).
+      const reason = rateLimited ? 'RATE_LIMITED_429' : (r1.photos.length ? 'NO_CLEAN_MATCH' : 'NO_RESULTS');
+      console.log('  ✗ pexels miss' + (ctx ? ' site="' + ctx + '"' : '') + ' query="' + q + '" reason=' + reason);
       return null;
     },
   };

@@ -34,6 +34,9 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# Elenco prospect (dati business): fuori da git e non servito pubblicamente
+web/*.xlsx
 *.pem
 *.key
 *.p12

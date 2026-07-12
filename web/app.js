@@ -3649,8 +3649,11 @@ function showLoginScreen(opts) {
     const e = (email.value || '').trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { msg.textContent = 'Email non valida.'; return; }
     btn.disabled = true; msg.textContent = 'Invio in corso…';
+    // Preserva la destinazione (?next=/crm) attraverso il flusso magic-link.
+    let next = '';
+    try { next = new URLSearchParams(location.search).get('next') || ''; } catch (e) {}
     try {
-      await api('POST', '/api/auth/request', { email: e });
+      await api('POST', '/api/auth/request', { email: e, ...(next ? { next } : {}) });
       msg.textContent = 'Fatto. Controlla la mail e apri il link per entrare.';
     } catch (err) { msg.textContent = 'Errore, riprova.'; btn.disabled = false; }
   };
@@ -3723,12 +3726,22 @@ async function maybeRedeemInvite() {
   // Dopo il magic link apre direttamente il progetto reclamato.
   // Il parametro site associato a paid resta gestito dal flusso Stripe.
   let bootSite = '';
+  let bootOpen = ''; // deep-link dal CRM: /?open=<projectId> apre direttamente il progetto nell'editor
   try {
     const bootParams = new URLSearchParams(location.search);
     if (!bootParams.has('paid')) bootSite = bootParams.get('site') || '';
+    bootOpen = bootParams.get('open') || '';
   } catch (e) {}
 
-  if (bootSite) {
+  if (bootOpen) {
+    try {
+      const cp = new URLSearchParams(location.search);
+      cp.delete('open');
+      const q = cp.toString();
+      history.replaceState(null, '', location.pathname + (q ? '?' + q : ''));
+    } catch (e) {}
+    await openProject(bootOpen);
+  } else if (bootSite) {
     try {
       const cleanParams = new URLSearchParams(location.search);
       cleanParams.delete('site');
