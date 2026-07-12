@@ -24,6 +24,22 @@ export const CRM_STATUSES = ['da_contattare', 'contattato', 'interessato', 'vend
 export type CrmStatus = (typeof CRM_STATUSES)[number];
 function isStatus(s: unknown): s is CrmStatus { return typeof s === 'string' && (CRM_STATUSES as readonly string[]).includes(s); }
 
+// Canale di contatto derivato dal SOLO telefono (nessun dato nuovo memorizzato):
+//   mobile italiano 3xx  -> whatsapp   (raggiungibile su WhatsApp)
+//   fisso 0xx / altro    -> telefono   (solo chiamata)
+//   telefono assente     -> nessun_contatto
+export const CRM_CHANNELS = ['whatsapp', 'telefono', 'nessun_contatto'] as const;
+export type CrmChannel = (typeof CRM_CHANNELS)[number];
+export function channelOf(phone: string): CrmChannel {
+  const p = (phone || '').replace(/[^\d+]/g, '');
+  if (!p) return 'nessun_contatto';
+  let nat = p;
+  if (nat.startsWith('+39')) nat = nat.slice(3);
+  else if (nat.startsWith('0039')) nat = nat.slice(4);
+  else if (nat.startsWith('39') && nat.length > 10) nat = nat.slice(2);
+  return nat.startsWith('3') ? 'whatsapp' : 'telefono';
+}
+
 const EXPIRY_DAYS = 20;
 const SAFE_SLUG = /^[a-z0-9-]{1,80}$/;
 
@@ -39,6 +55,7 @@ export interface CrmRow extends CrmIndexEntry {
   off: boolean;
   daysLive: number | null;
   expired: boolean;
+  channel: CrmChannel;
 }
 
 function loadIndex(): CrmIndex {
@@ -93,6 +110,7 @@ export function crmRows(): CrmRow[] {
       off: isSubOff(slug),
       daysLive: d,
       expired: d != null && d > EXPIRY_DAYS && status !== 'venduto',
+      channel: channelOf(base.phone),
     });
   }
   rows.sort((a, b) => a.name.localeCompare(b.name, 'it'));

@@ -43,6 +43,10 @@
   .badge{display:inline-block;font-size:11px;font-weight:700;border-radius:100px;padding:2px 8px;white-space:nowrap}
   .badge.exp{background:rgba(255,107,107,.14);color:var(--bad);border:1px solid rgba(255,107,107,.35)}
   .badge.spento{background:rgba(255,255,255,.06);color:var(--ink-2);border:1px solid var(--line)}
+  .badge.wa{background:rgba(62,207,142,.14);color:var(--ok);border:1px solid rgba(62,207,142,.35)}
+  a.badge.wa:hover{text-decoration:none;background:rgba(62,207,142,.24)}
+  .badge.tel{background:rgba(91,140,255,.14);color:var(--info);border:1px solid rgba(91,140,255,.35)}
+  .badge.noc{background:rgba(255,255,255,.05);color:var(--ink-3);border:1px solid var(--line)}
   td.notes textarea{width:100%;min-width:180px;height:40px;resize:vertical}
   .btn{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap}
   .btn:hover{border-color:var(--accent)}
@@ -52,6 +56,48 @@
   .saved.show{opacity:1}
   .days{font-variant-numeric:tabular-nums}
   .empty{padding:60px 20px;text-align:center;color:var(--ink-2)}
+
+  /* ---- Mobile (<768px): la tabella diventa una lista di card verticali ---- */
+  @media (max-width:768px){
+    .wrap{padding:12px 12px 84px}
+    table,thead,tbody,tr,td{display:block;width:100%}
+    thead{display:none}
+    table{font-size:14px}
+    tbody tr{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 14px 10px;margin:0 0 12px}
+    tbody tr:hover{background:var(--panel)}
+    tbody tr:has(td.empty){background:none;border:0;padding:0;margin:0}
+    tbody td{border:0;padding:6px 0;vertical-align:middle}
+    /* riga etichettata: etichetta a sinistra, valore a destra */
+    tbody td[data-label]{display:flex;align-items:center;gap:12px;min-height:44px}
+    tbody td[data-label]::before{content:attr(data-label);flex:0 0 40%;color:var(--ink-2);font-size:12px;font-weight:600}
+    /* titolo = nome locale · sottotitolo = città */
+    td.c-name{padding:0 0 2px}
+    td.c-name .name{font-size:17px;line-height:1.25}
+    td.c-name .sub{font-size:12px}
+    td.c-city{padding:0 0 10px;margin:0 0 6px;border-bottom:1px solid var(--line);color:var(--ink-2);font-size:13px}
+    /* controlli grandi tocco-friendly: etichetta sopra, controllo a tutta larghezza (≥44px) */
+    tbody td.c-ctl{flex-direction:column;align-items:stretch;gap:5px}
+    tbody td.c-ctl::before{flex:none}
+    td.c-ctl select.status,td.c-ctl input[type=date]{width:100%;min-height:44px;font-size:15px;padding:9px 12px}
+    /* note: textarea espandibile */
+    td.notes{display:block;padding:8px 0 4px}
+    td.notes::before{content:"Note";display:block;color:var(--ink-2);font-size:12px;font-weight:600;margin:0 0 5px}
+    td.notes textarea{width:100%;min-height:76px;height:auto;font-size:15px;padding:10px}
+    /* azioni: griglia 2 colonne, ogni bottone ≥44px */
+    td.c-actions{padding:10px 0 0;margin:8px 0 0;border-top:1px solid var(--line)}
+    td.c-actions .actions{gap:8px}
+    td.c-actions .actions>*{flex:1 1 calc(50% - 4px);min-height:44px;display:flex;align-items:center;justify-content:center;font-size:14px;padding:10px 8px}
+    /* header: ricerca e filtri sticky, a tutta larghezza (16px = niente zoom iOS) */
+    header{padding:10px 12px;gap:8px}
+    header .sp{display:none}
+    header h1{order:1;font-size:15px}
+    #count{order:2}
+    #savedFlag{order:3}
+    header a.btn{order:3;margin-left:auto}
+    #search{order:4;flex:1 1 100%;min-height:44px;font-size:16px}
+    #filter{order:5;flex:1 1 100%;min-height:44px;font-size:16px}
+    #channel{order:6;flex:1 1 100%;min-height:44px;font-size:16px}
+  }
 </style>
 </head>
 <body>
@@ -70,6 +116,12 @@
     <option value="scaduto">Scaduto</option>
     <option value="__expired">⚠︎ Scaduti (&gt;20gg)</option>
     <option value="__off">Spenti</option>
+  </select>
+  <select id="channel">
+    <option value="">Tutti i canali</option>
+    <option value="whatsapp">📱 WhatsApp (mobile)</option>
+    <option value="telefono">☎ Telefono (fisso)</option>
+    <option value="nessun_contatto">∅ Nessun contatto</option>
   </select>
   <a class="btn" href="/" target="_blank">← App</a>
 </header>
@@ -115,8 +167,10 @@ async function load(){
 function currentView(){
   const q = $('#search').value.trim().toLowerCase();
   const f = $('#filter').value;
+  const ch = $('#channel').value;
   let rows = ALL.filter(x=>{
     if(q && !((x.name||'').toLowerCase().includes(q) || (x.city||'').toLowerCase().includes(q))) return false;
+    if(ch && x.channel!==ch) return false;
     if(f==='__expired') return x.expired;
     if(f==='__off') return x.off;
     if(f) return x.status===f;
@@ -131,6 +185,11 @@ function currentView(){
   return rows;
 }
 
+function chanBadge(x){
+  if(x.channel==='whatsapp'){ const num=(x.phone||'').replace(/[^\d]/g,''); return ' <a class="badge wa" href="https://wa.me/'+num+'" target="_blank" rel="noopener">📱 WhatsApp</a>'; }
+  if(x.channel==='telefono') return ' <span class="badge tel">☎ fisso</span>';
+  return ' <span class="badge noc">∅ no contatto</span>';
+}
 function rowHtml(x){
   const statusSel = '<select class="status st-'+x.status+'" data-slug="'+esc(x.slug)+'" data-field="status">'
     + STATUSES.map(s=>'<option value="'+s+'"'+(s===x.status?' selected':'')+'>'+LABEL[s]+'</option>').join('') + '</select>';
@@ -139,14 +198,15 @@ function rowHtml(x){
   const days = x.daysLive==null ? '—' : (x.daysLive+' gg');
   const editHref = x.projectId ? '/?open='+encodeURIComponent(x.projectId) : '';
   return '<tr class="'+(x.off?'off':'')+'" data-slug="'+esc(x.slug)+'">'
-    + '<td><div class="name">'+esc(x.name)+offBadge+'</div><div class="sub"><a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.slug)+'</a></div></td>'
-    + '<td>'+esc(x.city)+'</td>'
-    + '<td>'+(x.phone?'<a href="tel:'+esc(x.phone.replace(/\s+/g,''))+'">'+esc(x.phone)+'</a>':'—')+'</td>'
-    + '<td>'+statusSel+'</td>'
-    + '<td><input type="date" data-slug="'+esc(x.slug)+'" data-field="lastContact" value="'+esc(x.lastContact)+'"></td>'
-    + '<td class="days">'+days+expBadge+'</td>'
+    + '<td class="c-name"><div class="name">'+esc(x.name)+offBadge+'</div><div class="sub"><a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.slug)+'</a></div></td>'
+    + '<td class="c-city">'+esc(x.city)+'</td>'
+    + '<td data-label="Telefono">'+(x.phone?'<a href="tel:'+esc(x.phone.replace(/\s+/g,''))+'">'+esc(x.phone)+'</a>':'—')+chanBadge(x)+'</td>'
+    + '<td class="c-ctl" data-label="Stato">'+statusSel+'</td>'
+    + '<td class="c-ctl" data-label="Ultimo contatto"><input type="date" data-slug="'+esc(x.slug)+'" data-field="lastContact" value="'+esc(x.lastContact)+'"></td>'
+    + '<td class="days" data-label="Online da">'+days+expBadge+'</td>'
     + '<td class="notes"><textarea data-slug="'+esc(x.slug)+'" data-field="notes" placeholder="Note del cliente…">'+esc(x.notes)+'</textarea></td>'
-    + '<td><div class="actions">'
+    + '<td class="c-actions"><div class="actions">'
+      + '<a class="btn" href="'+esc(x.url)+'" target="_blank" rel="noopener">Apri sito</a>'
       + (editHref?'<a class="btn" href="'+editHref+'" target="_blank">Modifica</a>':'<span class="btn" style="opacity:.4">Modifica</span>')
       + '<a class="btn" href="/offerta?site='+encodeURIComponent(x.slug)+'" target="_blank">Checkout</a>'
       + '<button class="btn '+(x.off?'off':'on')+'" data-toggle="'+esc(x.slug)+'" data-off="'+(x.off?'1':'0')+'">'+(x.off?'Riaccendi':'Spegni')+'</button>'
@@ -157,13 +217,15 @@ function rowHtml(x){
 function render(){
   const rows = currentView();
   const exp = ALL.filter(x=>x.expired).length, off = ALL.filter(x=>x.off).length;
-  $('#count').textContent = rows.length+' / '+ALL.length+' siti · '+exp+' scaduti · '+off+' spenti';
+  const wa = ALL.filter(x=>x.channel==='whatsapp').length;
+  $('#count').textContent = rows.length+' / '+ALL.length+' · 📱 '+wa+' WhatsApp · '+exp+' scaduti · '+off+' spenti';
   $('#rows').innerHTML = rows.length ? rows.map(rowHtml).join('') : '<tr><td colspan="8" class="empty">Nessun risultato.</td></tr>';
 }
 
 // --- eventi ---
 $('#search').addEventListener('input', render);
 $('#filter').addEventListener('change', render);
+$('#channel').addEventListener('change', render);
 document.querySelectorAll('thead th[data-sort]').forEach(th=>{
   if(th.classList.contains('no-sort')) return;
   th.addEventListener('click', ()=>{ const k=th.getAttribute('data-sort'); if(sortKey===k) sortDir=-sortDir; else {sortKey=k; sortDir=1;} render(); });
