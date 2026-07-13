@@ -3619,6 +3619,8 @@ function injectLogout(user) {
   } catch (e) {}
 }
 
+// Destinazione post-login (?next=/crm) catturata al boot, prima che la URL venga ripulita.
+let bootNext = '';
 function showLoginScreen(opts) {
   const o = opts || {};
   if (document.getElementById('loginOverlay')) return;
@@ -3652,6 +3654,7 @@ function showLoginScreen(opts) {
     // Preserva la destinazione (?next=/crm) attraverso il flusso magic-link.
     let next = '';
     try { next = new URLSearchParams(location.search).get('next') || ''; } catch (e) {}
+    if (!next) next = bootNext; // la URL potrebbe essere gia stata ripulita al boot
     try {
       await api('POST', '/api/auth/request', { email: e, ...(next ? { next } : {}) });
       msg.textContent = 'Fatto. Controlla la mail e apri il link per entrare.';
@@ -3700,6 +3703,7 @@ async function maybeRedeemInvite() {
   // Cattura subito un eventuale link di invito gratis, così sopravvive al giro del magic-link.
   try {
     const sp0 = new URLSearchParams(location.search);
+    bootNext = sp0.get('next') || ''; // preserva la destinazione post-login prima delle pulizie URL
     const ftok = sp0.get('free');
     if (ftok) {
       try { localStorage.setItem('brik_invite', ftok); } catch (e) {}
