@@ -59,6 +59,7 @@
   .btn{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap}
   .btn:hover{border-color:var(--accent)}
   .btn.on{color:var(--ok)} .btn.off{color:var(--warn)}
+  .btn.copied{color:var(--ok);border-color:var(--ok)}
   .actions{display:flex;gap:6px;flex-wrap:wrap}
   .saved{color:var(--ok);font-size:11px;opacity:0;transition:opacity .2s}
   .saved.show{opacity:1}
@@ -156,6 +157,33 @@
 </div>
 
 <script>
+// ─── TESTI DEI MESSAGGI WHATSAPP — modifica qui (placeholder: {NOME_LOCALE} {URL_SITO} {URL_CHECKOUT}) ───
+const MSG_TEMPLATES = {
+  primo: `Ciao, siamo Brik — Atlantix, Milano.
+
+Abbiamo preparato il nuovo sito di {NOME_LOCALE}. Puoi vederlo qui:
+{URL_SITO}
+
+Nessun impegno. Se non ti interessa rispondi STOP e non ti scriviamo più.`,
+  prezzo: `99 € all'anno, tutto compreso: sito, dominio, pubblicazione, aggiornamenti e assistenza.
+
+Qui i dettagli:
+{URL_CHECKOUT}`,
+};
+// ────────────────────────────────────────────────────────────────────────────────────────────
+function fillMsg(tpl, x){
+  const site = x.url || ('https://' + x.slug + '.thebrik.it');
+  return tpl.replace(/{NOME_LOCALE}/g, x.name || '').replace(/{URL_SITO}/g, site).replace(/{URL_CHECKOUT}/g, 'https://thebrik.it/offerta?site=' + x.slug);
+}
+async function copyText(text){
+  try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; } } catch(e){}
+  try { // fallback (mobile / contesti non-secure): textarea + execCommand
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.top='-1000px'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.focus(); ta.select(); try { ta.setSelectionRange(0, text.length); } catch(e){}
+    const ok = document.execCommand('copy'); ta.remove(); return ok;
+  } catch(e){ return false; }
+}
 const STATUSES = ['da_contattare','contattato','interessato','venduto','non_contattare','scaduto'];
 const LABEL = {da_contattare:'Da contattare',contattato:'Contattato',interessato:'Interessato',venduto:'Venduto',non_contattare:'⛔ Non contattare',scaduto:'Scaduto'};
 const DOMSTATUSES = ['da_proporre','proposto','registrato','attivo'];
@@ -229,6 +257,8 @@ function rowHtml(x){
     + '<td class="days" data-label="Online da">'+days+expBadge+'</td>'
     + '<td class="notes"><textarea data-slug="'+esc(x.slug)+'" data-field="notes" placeholder="Note del cliente…">'+esc(x.notes)+'</textarea>'+domainBox+'</td>'
     + '<td class="c-actions"><div class="actions">'
+      + '<button class="btn" data-copy="primo" data-slug="'+esc(x.slug)+'">Copia 1° messaggio</button>'
+      + '<button class="btn" data-copy="prezzo" data-slug="'+esc(x.slug)+'">Copia msg prezzo</button>'
       + '<a class="btn" href="'+esc(x.url)+'" target="_blank" rel="noopener">Apri sito</a>'
       + '<a class="btn" href="https://thebrik.it/preview/'+encodeURIComponent(x.slug)+'.png" target="_blank" rel="noopener">Anteprima</a>'
       + (editHref?'<a class="btn" href="'+editHref+'" target="_blank">Modifica</a>':'<span class="btn" style="opacity:.4">Modifica</span>')
@@ -274,6 +304,17 @@ $('#rows').addEventListener('focusout', async (e)=>{
   if(!row || row.notes===el.value) return;
   const r = await api('POST','/api/crm/row/'+encodeURIComponent(slug), {notes: el.value});
   if(r.ok){ row.notes = el.value; flashSaved(); }
+});
+// copia messaggio WhatsApp negli appunti (delegato)
+$('#rows').addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button[data-copy]'); if(!btn) return;
+  const row = findRow(btn.getAttribute('data-slug')); const tpl = MSG_TEMPLATES[btn.getAttribute('data-copy')];
+  if(!row || !tpl) return;
+  const prev = btn.textContent;
+  const ok = await copyText(fillMsg(tpl, row));
+  btn.textContent = ok ? 'Copiato ✓' : 'Copia non riuscita';
+  btn.classList.toggle('copied', ok);
+  setTimeout(()=>{ btn.textContent = prev; btn.classList.remove('copied'); }, 1400);
 });
 // spegni/riaccendi (delegato)
 $('#rows').addEventListener('click', async (e)=>{
