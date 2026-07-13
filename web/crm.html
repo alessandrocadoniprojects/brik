@@ -90,13 +90,15 @@
     /* header: ricerca e filtri sticky, a tutta larghezza (16px = niente zoom iOS) */
     header{padding:10px 12px;gap:8px}
     header .sp{display:none}
-    header h1{order:1;font-size:15px}
-    #count{order:2}
-    #savedFlag{order:3}
-    header a.btn{order:3;margin-left:auto}
-    #search{order:4;flex:1 1 100%;min-height:44px;font-size:16px}
-    #filter{order:5;flex:1 1 100%;min-height:44px;font-size:16px}
-    #channel{order:6;flex:1 1 100%;min-height:44px;font-size:16px}
+    header a.btn{order:0}                             /* "← App" a sinistra (back-button) */
+    header h1{order:1;font-size:15px}                 /* titolo accanto */
+    #savedFlag{position:absolute;top:12px;right:12px;font-size:11px}  /* fuori dal flusso: non sballa la riga 1 */
+    #count{order:4;flex:1 1 100%;font-size:11px}      /* conteggio: riga propria full width */
+    #search{order:5}
+    #filter{order:6}
+    #channel{order:7}
+    #search,#filter,#channel{flex:1 1 100%;width:100%;min-width:0;min-height:44px;font-size:16px}
+    td.c-name .name,td.c-name .sub{overflow-wrap:anywhere}
   }
 </style>
 </head>
@@ -207,6 +209,7 @@ function rowHtml(x){
     + '<td class="notes"><textarea data-slug="'+esc(x.slug)+'" data-field="notes" placeholder="Note del cliente…">'+esc(x.notes)+'</textarea></td>'
     + '<td class="c-actions"><div class="actions">'
       + '<a class="btn" href="'+esc(x.url)+'" target="_blank" rel="noopener">Apri sito</a>'
+      + '<a class="btn" href="https://thebrik.it/preview/'+encodeURIComponent(x.slug)+'.png" target="_blank" rel="noopener">Anteprima</a>'
       + (editHref?'<a class="btn" href="'+editHref+'" target="_blank">Modifica</a>':'<span class="btn" style="opacity:.4">Modifica</span>')
       + '<a class="btn" href="/offerta?site='+encodeURIComponent(x.slug)+'" target="_blank">Checkout</a>'
       + '<button class="btn '+(x.off?'off':'on')+'" data-toggle="'+esc(x.slug)+'" data-off="'+(x.off?'1':'0')+'">'+(x.off?'Riaccendi':'Spegni')+'</button>'

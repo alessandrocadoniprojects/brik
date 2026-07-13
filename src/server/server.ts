@@ -96,6 +96,7 @@ const webDir = fileURLToPath(new URL('../../web/', import.meta.url));
 const dataDir = fileURLToPath(new URL('../../data/sites/', import.meta.url));
 const assetsDir = fileURLToPath(new URL('../../data/assets/', import.meta.url));
 const imagesDir = fileURLToPath(new URL('../../data/images/', import.meta.url)); // foto localizzate (ex-Pexels) servite su /img/<hash>.<ext>
+const previewsDir = fileURLToPath(new URL('../../data/previews/', import.meta.url)); // screenshot homepage prospect, serviti su /preview/<slug>.png
 const ownersDir = fileURLToPath(new URL('../../data/owners/', import.meta.url));
 const conciergeDir = fileURLToPath(new URL('../../data/concierge/', import.meta.url));
 const genDir = fileURLToPath(new URL('../../data/gen/', import.meta.url)); // marker dei job di generazione asincroni
@@ -702,7 +703,7 @@ function newId(): string {
 /** Riscrive i link interni assoluti perche puntino dentro l'anteprima. */
 function prefixInternalLinks(html: string, base: string): string {
   return html.replace(
-    /\b(href|src|action)\s*=\s*("|')(\/(?!\/)[^"']*)\2/gi,
+    /\b(href|src|action)\s*=\s*("|')(\/(?!\/|img\/|_brik-fonts\/)[^"']*)\2/gi,
     (_m, attr: string, q: string, path: string) => `${attr}=${q}${base}${path}${q}`,
   );
 }
@@ -1250,6 +1251,30 @@ const server = createServer(async (req, res) => {
       res.writeHead(404, { 'content-type': 'text/plain' });
       res.end('immagine non trovata');
       return;
+    }
+
+    // ----- ANTEPRIME SCREENSHOT: /preview/<slug>.png da data/previews/ (campagna WhatsApp).
+    // Servita a TUTTI gli host, pubblica, cache lunga. Slug validato → niente path traversal.
+    // Deve stare PRIMA del handler editor /preview/:id (che gestisce solo route di pagina).
+    if (method === 'GET' && path.startsWith('/preview/') && path.endsWith('.png')) {
+      const m = path.match(/^\/preview\/([a-z0-9-]{1,80})\.png$/);
+      if (m) {
+        try {
+          const bytes = await readFile(join(previewsDir, m[1]! + '.png'));
+          res.writeHead(200, {
+            'content-type': 'image/png',
+            'cache-control': 'public, max-age=86400',
+            'access-control-allow-origin': '*',
+            'cross-origin-resource-policy': 'cross-origin',
+          });
+          res.end(bytes);
+          return;
+        } catch {
+          res.writeHead(404, { 'content-type': 'text/plain' });
+          res.end('anteprima non trovata');
+          return;
+        }
+      }
     }
 
     // ----- LOCAL HOSTING: Host == <sub>.thebrik.it pubblicato → servi il sito prospect
