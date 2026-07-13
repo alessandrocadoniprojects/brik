@@ -1165,7 +1165,11 @@ async function fulfillOffertaSale(cs: Stripe.Checkout.Session): Promise<void> {
         + '<b>Azione:</b> apri il sito <b>' + esc(slug) + '</b> nell&rsquo;editor e <b>ripubblicalo</b> a mano appena possibile (i dati cliente sono già salvati: basta ripubblicare).'
         + '</div>'
       : '';
+    const nextStep = '<div style="background:#123a2e;color:#c9ffe8;padding:14px 16px;border-radius:10px;margin:0 0 16px;font-size:15px;line-height:1.5">'
+      + '➡️ <b>PROSSIMO PASSO:</b> proponi al cliente il dominio <b>.it</b>, registralo e collegalo al sito.'
+      + '</div>';
     const html = alert
+      + nextStep
       + '<h2>Nuova vendita Brik</h2>'
       + '<p><b>Locale:</b> ' + esc(localName || slug || '?') + '<br>'
       + '<b>Sito:</b> <a href="https://' + esc(slug) + '.thebrik.it">' + esc(slug) + '.thebrik.it</a> · slug <code>' + esc(slug) + '</code></p>'
@@ -1321,7 +1325,7 @@ const server = createServer(async (req, res) => {
       const mRow = path.match(/^\/api\/crm\/row\/([a-z0-9-]{1,80})$/);
       if (mRow && method === 'POST') {
         const body = await readJsonBody(req);
-        const done = updateCrmRow(mRow[1]!, { status: body.status, lastContact: body.lastContact, notes: body.notes });
+        const done = updateCrmRow(mRow[1]!, { status: body.status, lastContact: body.lastContact, notes: body.notes, domain: body.domain, domainStatus: body.domainStatus });
         return done ? sendJson(res, 200, { ok: true }) : sendJson(res, 400, { ok: false, error: { code: 'BAD_UPDATE', message: 'Aggiornamento non valido.' } });
       }
       const mTog = path.match(/^\/api\/crm\/toggle\/([a-z0-9-]{1,80})$/);

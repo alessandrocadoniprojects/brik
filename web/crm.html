@@ -39,6 +39,7 @@
   .st-contattato{color:var(--info)}
   .st-interessato{color:var(--warn)}
   .st-venduto{color:var(--ok)}
+  .st-non_contattare{color:var(--bad);font-weight:800}
   .st-scaduto{color:var(--bad)}
   .badge{display:inline-block;font-size:11px;font-weight:700;border-radius:100px;padding:2px 8px;white-space:nowrap}
   .badge.exp{background:rgba(255,107,107,.14);color:var(--bad);border:1px solid rgba(255,107,107,.35)}
@@ -47,7 +48,14 @@
   a.badge.wa:hover{text-decoration:none;background:rgba(62,207,142,.24)}
   .badge.tel{background:rgba(91,140,255,.14);color:var(--info);border:1px solid rgba(91,140,255,.35)}
   .badge.noc{background:rgba(255,255,255,.05);color:var(--ink-3);border:1px solid var(--line)}
+  .badge.nocontact{background:var(--bad);color:#fff;border:1px solid var(--bad)}
+  tr.nocontact{opacity:.6}
+  tr.nocontact td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
   td.notes textarea{width:100%;min-width:180px;height:40px;resize:vertical}
+  .domainbox{margin-top:8px;padding:9px 10px;border:1px solid var(--accent);border-radius:8px;background:rgba(124,140,255,.07)}
+  .domainlbl{font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px}
+  .domainbox .domain-in{width:100%;margin-bottom:6px}
+  .domainbox .domst{width:100%}
   .btn{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap}
   .btn:hover{border-color:var(--accent)}
   .btn.on{color:var(--ok)} .btn.off{color:var(--warn)}
@@ -64,6 +72,7 @@
     thead{display:none}
     table{font-size:14px}
     tbody tr{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 14px 10px;margin:0 0 12px}
+    tbody tr.nocontact{border-color:var(--bad)}
     tbody tr:hover{background:var(--panel)}
     tbody tr:has(td.empty){background:none;border:0;padding:0;margin:0}
     tbody td{border:0;padding:6px 0;vertical-align:middle}
@@ -79,6 +88,7 @@
     tbody td.c-ctl{flex-direction:column;align-items:stretch;gap:5px}
     tbody td.c-ctl::before{flex:none}
     td.c-ctl select.status,td.c-ctl input[type=date]{width:100%;min-height:44px;font-size:15px;padding:9px 12px}
+    .domainbox .domain-in,.domainbox .domst{min-height:44px;font-size:16px}
     /* note: textarea espandibile */
     td.notes{display:block;padding:8px 0 4px}
     td.notes::before{content:"Note";display:block;color:var(--ink-2);font-size:12px;font-weight:600;margin:0 0 5px}
@@ -115,6 +125,7 @@
     <option value="contattato">Contattato</option>
     <option value="interessato">Interessato</option>
     <option value="venduto">Venduto</option>
+    <option value="non_contattare">⛔ Non contattare</option>
     <option value="scaduto">Scaduto</option>
     <option value="__expired">⚠︎ Scaduti (&gt;20gg)</option>
     <option value="__off">Spenti</option>
@@ -145,8 +156,10 @@
 </div>
 
 <script>
-const STATUSES = ['da_contattare','contattato','interessato','venduto','scaduto'];
-const LABEL = {da_contattare:'Da contattare',contattato:'Contattato',interessato:'Interessato',venduto:'Venduto',scaduto:'Scaduto'};
+const STATUSES = ['da_contattare','contattato','interessato','venduto','non_contattare','scaduto'];
+const LABEL = {da_contattare:'Da contattare',contattato:'Contattato',interessato:'Interessato',venduto:'Venduto',non_contattare:'⛔ Non contattare',scaduto:'Scaduto'};
+const DOMSTATUSES = ['da_proporre','proposto','registrato','attivo'];
+const DOMLABEL = {da_proporre:'Da proporre',proposto:'Proposto',registrato:'Registrato',attivo:'Attivo'};
 let ALL = [];
 let sortKey = 'name', sortDir = 1;
 
@@ -197,16 +210,24 @@ function rowHtml(x){
     + STATUSES.map(s=>'<option value="'+s+'"'+(s===x.status?' selected':'')+'>'+LABEL[s]+'</option>').join('') + '</select>';
   const expBadge = x.expired ? ' <span class="badge exp">scaduto '+x.daysLive+'gg</span>' : '';
   const offBadge = x.off ? ' <span class="badge spento">spento</span>' : '';
+  const nocBadge = x.status==='non_contattare' ? ' <span class="badge nocontact">⛔ NON CONTATTARE</span>' : '';
   const days = x.daysLive==null ? '—' : (x.daysLive+' gg');
   const editHref = x.projectId ? '/?open='+encodeURIComponent(x.projectId) : '';
-  return '<tr class="'+(x.off?'off':'')+'" data-slug="'+esc(x.slug)+'">'
-    + '<td class="c-name"><div class="name">'+esc(x.name)+offBadge+'</div><div class="sub"><a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.slug)+'</a></div></td>'
+  const domainBox = x.status==='venduto'
+    ? '<div class="domainbox"><div class="domainlbl">🌐 Dominio</div>'
+      + '<input type="text" class="domain-in" data-slug="'+esc(x.slug)+'" data-field="domain" value="'+esc(x.domain||'')+'" placeholder="es. ristoranteasia.it">'
+      + '<select class="domst" data-slug="'+esc(x.slug)+'" data-field="domainStatus">'
+      + DOMSTATUSES.map(s=>'<option value="'+s+'"'+(((x.domainStatus||'da_proporre')===s)?' selected':'')+'>'+DOMLABEL[s]+'</option>').join('')
+      + '</select></div>'
+    : '';
+  return '<tr class="'+[x.off?'off':'', x.status==='non_contattare'?'nocontact':''].filter(Boolean).join(' ')+'" data-slug="'+esc(x.slug)+'">'
+    + '<td class="c-name"><div class="name">'+esc(x.name)+nocBadge+offBadge+'</div><div class="sub"><a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.slug)+'</a></div></td>'
     + '<td class="c-city">'+esc(x.city)+'</td>'
     + '<td data-label="Telefono">'+(x.phone?'<a href="tel:'+esc(x.phone.replace(/\s+/g,''))+'">'+esc(x.phone)+'</a>':'—')+chanBadge(x)+'</td>'
     + '<td class="c-ctl" data-label="Stato">'+statusSel+'</td>'
     + '<td class="c-ctl" data-label="Ultimo contatto"><input type="date" data-slug="'+esc(x.slug)+'" data-field="lastContact" value="'+esc(x.lastContact)+'"></td>'
     + '<td class="days" data-label="Online da">'+days+expBadge+'</td>'
-    + '<td class="notes"><textarea data-slug="'+esc(x.slug)+'" data-field="notes" placeholder="Note del cliente…">'+esc(x.notes)+'</textarea></td>'
+    + '<td class="notes"><textarea data-slug="'+esc(x.slug)+'" data-field="notes" placeholder="Note del cliente…">'+esc(x.notes)+'</textarea>'+domainBox+'</td>'
     + '<td class="c-actions"><div class="actions">'
       + '<a class="btn" href="'+esc(x.url)+'" target="_blank" rel="noopener">Apri sito</a>'
       + '<a class="btn" href="https://thebrik.it/preview/'+encodeURIComponent(x.slug)+'.png" target="_blank" rel="noopener">Anteprima</a>'
@@ -244,7 +265,7 @@ $('#rows').addEventListener('change', async (e)=>{
   const val = el.value;
   const r = await api('POST','/api/crm/row/'+encodeURIComponent(slug), {[field]: val});
   if(r.ok){ const row=findRow(slug); if(row){ row[field]=val; if(field==='status'){ el.className='status st-'+val; // ricalcola expired lato client (grezzo: >20gg e non venduto)
-        row.expired = row.daysLive!=null && row.daysLive>20 && val!=='venduto'; render(); } } flashSaved(); }
+        row.expired = row.daysLive!=null && row.daysLive>20 && val!=='venduto' && val!=='non_contattare'; render(); } } flashSaved(); }
 });
 // blur su note
 $('#rows').addEventListener('focusout', async (e)=>{

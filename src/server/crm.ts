@@ -20,7 +20,7 @@ const dataRoot = fileURLToPath(new URL('../../data/', import.meta.url));
 const CRM_DIR = join(dataRoot, 'crm');
 const INDEX_PATH = join(CRM_DIR, 'index.json');
 
-export const CRM_STATUSES = ['da_contattare', 'contattato', 'interessato', 'venduto', 'scaduto'] as const;
+export const CRM_STATUSES = ['da_contattare', 'contattato', 'interessato', 'venduto', 'non_contattare', 'scaduto'] as const;
 export type CrmStatus = (typeof CRM_STATUSES)[number];
 function isStatus(s: unknown): s is CrmStatus { return typeof s === 'string' && (CRM_STATUSES as readonly string[]).includes(s); }
 
@@ -43,9 +43,14 @@ export function channelOf(phone: string): CrmChannel {
 const EXPIRY_DAYS = 20;
 const SAFE_SLUG = /^[a-z0-9-]{1,80}$/;
 
+// Stato del dominio .it per i siti venduti (setup post-vendita).
+export const CRM_DOMAIN_STATUSES = ['da_proporre', 'proposto', 'registrato', 'attivo'] as const;
+export type CrmDomainStatus = (typeof CRM_DOMAIN_STATUSES)[number];
+function isDomainStatus(s: unknown): s is CrmDomainStatus { return typeof s === 'string' && (CRM_DOMAIN_STATUSES as readonly string[]).includes(s); }
+
 interface CrmIndexEntry { projectId: string; name: string; city: string; phone: string; url: string; publishedAt: string }
 type CrmIndex = Record<string, CrmIndexEntry>;
-interface CrmOverride { status?: CrmStatus; lastContact?: string; notes?: string; updatedAt?: string }
+interface CrmOverride { status?: CrmStatus; lastContact?: string; notes?: string; domain?: string; domainStatus?: CrmDomainStatus; updatedAt?: string }
 
 export interface CrmRow extends CrmIndexEntry {
   slug: string;
@@ -56,6 +61,8 @@ export interface CrmRow extends CrmIndexEntry {
   daysLive: number | null;
   expired: boolean;
   channel: CrmChannel;
+  domain: string;
+  domainStatus: CrmDomainStatus;
 }
 
 function loadIndex(): CrmIndex {
@@ -109,8 +116,10 @@ export function crmRows(): CrmRow[] {
       notes: ov.notes || '',
       off: isSubOff(slug),
       daysLive: d,
-      expired: d != null && d > EXPIRY_DAYS && status !== 'venduto',
+      expired: d != null && d > EXPIRY_DAYS && status !== 'venduto' && status !== 'non_contattare',
       channel: channelOf(base.phone),
+      domain: ov.domain || '',
+      domainStatus: isDomainStatus(ov.domainStatus) ? ov.domainStatus : 'da_proporre',
     });
   }
   rows.sort((a, b) => a.name.localeCompare(b.name, 'it'));
@@ -118,11 +127,13 @@ export function crmRows(): CrmRow[] {
 }
 
 /** Aggiorna i campi mutabili di un sito. Ritorna false su slug/stato non validi. */
-export function updateCrmRow(slug: string, patch: { status?: unknown; lastContact?: unknown; notes?: unknown }): boolean {
+export function updateCrmRow(slug: string, patch: { status?: unknown; lastContact?: unknown; notes?: unknown; domain?: unknown; domainStatus?: unknown }): boolean {
   if (!SAFE_SLUG.test(slug) || !loadIndex()[slug]) return false;
   const clean: CrmOverride = {};
   if (patch.status !== undefined) { if (!isStatus(patch.status)) return false; clean.status = patch.status; }
   if (patch.lastContact !== undefined) clean.lastContact = String(patch.lastContact).slice(0, 10); // 'YYYY-MM-DD' o ''
   if (patch.notes !== undefined) clean.notes = String(patch.notes).slice(0, 5000);
+  if (patch.domain !== undefined) clean.domain = String(patch.domain).slice(0, 120).trim();
+  if (patch.domainStatus !== undefined) { if (!isDomainStatus(patch.domainStatus)) return false; clean.domainStatus = patch.domainStatus; }
   return saveOverride(slug, clean);
 }
