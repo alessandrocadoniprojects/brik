@@ -1693,7 +1693,24 @@ const server = createServer(async (req, res) => {
       console.log('  → auth: link di accesso inviato a', email);
       return sendJson(res, 200, { ok: true }); // risposta sempre uguale: non rivela se l'email esiste
     }
+    // Magic link: il GET mostra una pagina che conferma via POST → il token si consuma
+    // SOLO col POST. Gli scanner/anteprime delle email fanno solo GET, quindi non lo bruciano
+    // (niente più "link scaduto" da prefetch). L'auto-submit JS rende il passaggio invisibile.
     if (path === '/api/auth/verify' && method === 'GET') {
+      const token = url.searchParams.get('token') || '';
+      const nextQ = safeNextPath(url.searchParams.get('next'));
+      const action = '/api/auth/verify?token=' + encodeURIComponent(token) + (nextQ ? '&next=' + encodeURIComponent(nextQ) : '');
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      res.end('<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Accesso a Brik</title>'
+        + '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0b14;color:#eef1f7;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}.c{text-align:center;padding:32px;max-width:360px}.c img{width:140px;max-width:60%;margin:0 0 18px}.c p{color:#9aa3b2;line-height:1.5;margin:0 0 18px}.c button{background:#5b5bf0;color:#fff;border:0;border-radius:10px;padding:12px 22px;font-size:15px;font-weight:600;cursor:pointer}</style></head>'
+        + '<body><form id="f" method="POST" action="' + esc(action) + '"><div class="c">'
+        + '<img src="/brik-logo-light.png" alt="brik">'
+        + '<p>Accesso a Brik in corso…</p>'
+        + '<button type="submit">Entra</button>'
+        + '</div></form><script>try{document.getElementById("f").submit();}catch(e){}</script></body></html>');
+      return;
+    }
+    if (path === '/api/auth/verify' && method === 'POST') {
       const token = url.searchParams.get('token') || '';
       const email = authStore.consumeLoginToken(token);
       if (!email) { res.writeHead(302, { Location: '/?login=expired' }); res.end(); return; }
