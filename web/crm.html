@@ -66,6 +66,32 @@
   .days{font-variant-numeric:tabular-nums}
   .empty{padding:60px 20px;text-align:center;color:var(--ink-2)}
 
+  /* ── Modalità rapida: un lead alla volta, a schermo pieno ── */
+  .qm-launch{background:var(--accent-2);color:#fff;border-color:var(--accent-2);font-weight:700}
+  .qm-launch:hover{border-color:#fff}
+  #quickMode{position:fixed;inset:0;z-index:9000;background:var(--bg);display:none;flex-direction:column}
+  #quickMode.on{display:flex}
+  .qm-top{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--bg-2)}
+  .qm-count{font-variant-numeric:tabular-nums;font-weight:700;font-size:16px}
+  .qm-exit{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:0 16px;min-height:44px;color:var(--ink);font-weight:600;cursor:pointer}
+  .qm-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:22px 18px 40px;max-width:560px;width:100%;margin:0 auto}
+  .qm-name{font-size:26px;font-weight:700;line-height:1.2;margin:0 0 6px;overflow-wrap:anywhere}
+  .qm-city{color:var(--ink-2);font-size:15px;margin:0 0 2px}
+  .qm-phone{font-size:18px;margin:10px 0 4px}
+  .qm-phone a{color:var(--accent)}
+  .qm-sect{font-size:11px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin:22px 0 9px}
+  .qm-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink);margin:0 0 10px}
+  .qm-btn:active{transform:scale(.99)}
+  .qm-btn.copied{color:var(--ok);border-color:var(--ok)}
+  .qm-btn.wa{background:rgba(62,207,142,.14);color:var(--ok);border-color:rgba(62,207,142,.4)}
+  .qm-btn.done{background:rgba(62,207,142,.16);color:var(--ok);border-color:rgba(62,207,142,.45)}
+  .qm-btn.stop{background:rgba(255,107,107,.14);color:var(--bad);border-color:rgba(255,107,107,.4)}
+  .qm-btn.skip{color:var(--ink-2)}
+  .qm-close-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .qm-close-row .qm-btn{margin:0}
+  .qm-done{min-height:60vh;display:grid;place-items:center;text-align:center;color:var(--ink-2)}
+  .qm-done .big{font-size:44px;margin-bottom:8px}
+
   /* ---- Mobile (<768px): la tabella diventa una lista di card verticali ---- */
   @media (max-width:768px){
     .wrap{padding:12px 12px 84px}
@@ -109,6 +135,7 @@
     #filter{order:6}
     #channel{order:7}
     #search,#filter,#channel{flex:1 1 100%;width:100%;min-width:0;min-height:44px;font-size:16px}
+    #quickStart{order:8;flex:1 1 100%;width:100%;min-height:48px;font-size:16px}
     td.c-name .name,td.c-name .sub{overflow-wrap:anywhere}
   }
 </style>
@@ -137,6 +164,7 @@
     <option value="telefono">☎ Telefono (fisso)</option>
     <option value="nessun_contatto">∅ Nessun contatto</option>
   </select>
+  <button id="quickStart" class="btn qm-launch" type="button">▶ Modalità rapida</button>
   <a class="btn" href="/" target="_blank">← App</a>
 </header>
 
@@ -205,6 +233,7 @@ async function load(){
   if(!r.ok){ $('#rows').innerHTML = '<tr><td colspan="8" class="empty">Accesso negato o errore.</td></tr>'; return; }
   if(!r.ready){ $('#rows').innerHTML = '<tr><td colspan="8" class="empty">CRM non ancora inizializzato (manca data/crm/index.json). Esegui l\'import.</td></tr>'; return; }
   ALL = r.rows; render();
+  if(r.quick) startQuick({ persist:false, silent:true }); // preferenza per-utente: riapre la modalità rapida
 }
 
 function currentView(){
@@ -326,6 +355,89 @@ $('#rows').addEventListener('click', async (e)=>{
   if(r.ok){ const row=findRow(slug); if(row){ row.off=r.off; render(); } flashSaved(); }
   else alert((r.error&&r.error.message)||'Errore');
 });
+
+// ── Modalità rapida: un lead alla volta, a schermo pieno. Preferenza salvata per-utente (server). ──
+let quickList = [], quickIdx = 0;
+function saveQuickPref(on){ try { api('POST','/api/crm/prefs',{quick:!!on}); } catch(e){} }
+function todayISO(){ const d=new Date(),p=n=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
+function ensureQuickDom(){
+  if(document.getElementById('quickMode')) return;
+  const d = document.createElement('div');
+  d.id = 'quickMode';
+  d.innerHTML = '<div class="qm-top"><span class="qm-count" id="qmCount"></span><button class="qm-exit" data-qm="exit" type="button">Esci</button></div><div class="qm-body" id="qmBody"></div>';
+  document.body.appendChild(d);
+  d.addEventListener('click', onQuickClick);
+}
+function startQuick(opts){
+  opts = opts || {};
+  quickList = currentView(); quickIdx = 0;
+  if(!quickList.length){ if(!opts.silent) alert('Nessun lead con i filtri attivi.'); return; }
+  if(opts.persist!==false) saveQuickPref(true);
+  ensureQuickDom();
+  document.getElementById('quickMode').classList.add('on');
+  document.body.style.overflow = 'hidden';
+  renderQuick();
+}
+function exitQuick(){
+  saveQuickPref(false);
+  const d = document.getElementById('quickMode'); if(d) d.classList.remove('on');
+  document.body.style.overflow = '';
+  render(); // riflette nella lista i cambi di stato fatti in modalità rapida
+}
+function renderQuick(){
+  const body = document.getElementById('qmBody'), count = document.getElementById('qmCount');
+  if(quickIdx >= quickList.length){
+    count.textContent = quickList.length+' / '+quickList.length;
+    body.innerHTML = '<div class="qm-done"><div><div class="big">✓</div><p>Fatti tutti i '+quickList.length+' lead.</p><button class="qm-btn done" data-qm="exit" type="button">Torna alla lista</button></div></div>';
+    return;
+  }
+  const x = quickList[quickIdx];
+  count.textContent = (quickIdx+1)+' / '+quickList.length;
+  const num = (x.phone||'').replace(/[^\d]/g,'');
+  const phone = x.phone ? '<a href="tel:'+esc(x.phone.replace(/\s+/g,''))+'">'+esc(x.phone)+'</a>' : '—';
+  body.innerHTML =
+    '<div class="qm-name">'+esc(x.name)+'</div>'
+    + '<div class="qm-city">'+esc(x.city||'—')+'</div>'
+    + '<div class="qm-phone">'+phone+'</div>'
+    + '<div class="qm-sect">Messaggi</div>'
+    + '<button class="qm-btn" data-qm="copy" data-tpl="primo" type="button">Copia messaggio</button>'
+    + '<button class="qm-btn" data-qm="copy" data-tpl="prezzo" type="button">Copia msg prezzo</button>'
+    + '<div class="qm-sect">Contatta</div>'
+    + '<button class="qm-btn" data-qm="preview" type="button">Anteprima</button>'
+    + (num ? '<button class="qm-btn wa" data-qm="wa" type="button">WhatsApp</button>' : '')
+    + '<div class="qm-sect">Chiudi e vai al prossimo</div>'
+    + '<button class="qm-btn done" data-qm="contattato" type="button">✓ Contattato</button>'
+    + '<div class="qm-close-row"><button class="qm-btn stop" data-qm="noncontattare" type="button">⛔ Non contattare</button><button class="qm-btn skip" data-qm="salta" type="button">⏭ Salta</button></div>';
+}
+async function onQuickClick(e){
+  const b = e.target.closest('[data-qm]'); if(!b) return;
+  const act = b.getAttribute('data-qm');
+  if(act==='exit'){ exitQuick(); return; }
+  const x = quickList[quickIdx]; if(!x) return;
+  if(act==='copy'){
+    const tpl = MSG_TEMPLATES[b.getAttribute('data-tpl')]; if(!tpl) return;
+    const prev = b.textContent, ok = await copyText(fillMsg(tpl, x));
+    b.textContent = ok ? 'Copiato ✓' : 'Copia non riuscita'; b.classList.toggle('copied', ok);
+    setTimeout(()=>{ b.textContent = prev; b.classList.remove('copied'); }, 1400);
+    return;
+  }
+  if(act==='preview'){ window.open('https://thebrik.it/preview/'+encodeURIComponent(x.slug)+'.png','_blank'); return; }
+  if(act==='wa'){ window.open('https://wa.me/'+(x.phone||'').replace(/[^\d]/g,''),'_blank'); return; }
+  if(act==='salta'){ quickIdx++; renderQuick(); return; }
+  if(act==='contattato' || act==='noncontattare'){
+    const status = act==='contattato' ? 'contattato' : 'non_contattare';
+    const patch = act==='contattato' ? { status, lastContact: todayISO() } : { status };
+    b.disabled = true;
+    const r = await api('POST','/api/crm/row/'+encodeURIComponent(x.slug), patch);
+    b.disabled = false;
+    if(r && r.ok){
+      const row = findRow(x.slug);
+      if(row){ row.status = status; if(patch.lastContact) row.lastContact = patch.lastContact; row.expired = row.daysLive!=null && row.daysLive>20 && status!=='venduto' && status!=='non_contattare'; }
+      quickIdx++; renderQuick();
+    } else { alert((r&&r.error&&r.error.message)||'Errore salvataggio'); }
+  }
+}
+$('#quickStart').addEventListener('click', ()=>startQuick());
 
 load();
 </script>

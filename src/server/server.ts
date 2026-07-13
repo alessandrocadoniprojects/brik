@@ -97,6 +97,7 @@ const dataDir = fileURLToPath(new URL('../../data/sites/', import.meta.url));
 const assetsDir = fileURLToPath(new URL('../../data/assets/', import.meta.url));
 const imagesDir = fileURLToPath(new URL('../../data/images/', import.meta.url)); // foto localizzate (ex-Pexels) servite su /img/<hash>.<ext>
 const previewsDir = fileURLToPath(new URL('../../data/previews/', import.meta.url)); // screenshot homepage prospect, serviti su /preview/<slug>.png
+const crmPrefsDir = fileURLToPath(new URL('../../data/crm-prefs/', import.meta.url)); // preferenze CRM per-utente (es. modalità rapida)
 const ownersDir = fileURLToPath(new URL('../../data/owners/', import.meta.url));
 const conciergeDir = fileURLToPath(new URL('../../data/concierge/', import.meta.url));
 const genDir = fileURLToPath(new URL('../../data/gen/', import.meta.url)); // marker dei job di generazione asincroni
@@ -237,6 +238,14 @@ function writeOwnerFile(id: string, patch: Partial<OwnerFile>): void {
 }
 function writeOwnerEmail(id: string, email: string): void { writeOwnerFile(id, { email }); }
 function readOwnerEmail(id: string): string | null { const e = readOwnerFile(id).email; return typeof e === 'string' ? e : null; }
+// Preferenze CRM per-utente (operatore). Es. "modalità rapida" attiva/spenta, ricordata tra i device.
+function crmPrefKey(email: string): string { return (email || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 120); }
+function readCrmQuick(email: string): boolean {
+  try { const j = JSON.parse(readFileSync(join(crmPrefsDir, crmPrefKey(email) + '.json'), 'utf8')); return !!j.quick; } catch { return false; }
+}
+function writeCrmQuick(email: string, quick: boolean): void {
+  try { mkdirSync(crmPrefsDir, { recursive: true }); writeFileSync(join(crmPrefsDir, crmPrefKey(email) + '.json'), JSON.stringify({ quick: !!quick })); } catch { /* best-effort */ }
+}
 function readLegal(id: string): LegalData { return readOwnerFile(id).legal || {}; }
 function writeLegal(id: string, legal: LegalData): void { writeOwnerFile(id, { legal }); }
 function readBusinessProfile(id: string): BusinessProfile | undefined { return readOwnerFile(id).businessProfile; }
@@ -1320,7 +1329,12 @@ const server = createServer(async (req, res) => {
       const me = sessionUserOf(req);
       if (!me || !me.isOperator) return sendJson(res, 403, { ok: false, error: { code: 'FORBIDDEN', message: 'Solo operatori.' } });
       if (path === '/api/crm/rows' && method === 'GET') {
-        return sendJson(res, 200, { ok: true, ready: crmReady(), rows: crmReady() ? crmRows() : [] });
+        return sendJson(res, 200, { ok: true, ready: crmReady(), quick: readCrmQuick(me.email), rows: crmReady() ? crmRows() : [] });
+      }
+      if (path === '/api/crm/prefs' && method === 'POST') {
+        const body = await readJsonBody(req);
+        writeCrmQuick(me.email, !!body.quick);
+        return sendJson(res, 200, { ok: true });
       }
       const mRow = path.match(/^\/api\/crm\/row\/([a-z0-9-]{1,80})$/);
       if (mRow && method === 'POST') {
