@@ -114,7 +114,9 @@
     /* controlli grandi tocco-friendly: etichetta sopra, controllo a tutta larghezza (≥44px) */
     tbody td.c-ctl{flex-direction:column;align-items:stretch;gap:5px}
     tbody td.c-ctl::before{flex:none}
-    td.c-ctl select.status,td.c-ctl input[type=date]{width:100%;min-height:44px;font-size:15px;padding:9px 12px}
+    td.c-ctl select.status,td.c-ctl input[type=date]{width:100%;min-width:0;min-height:44px;font-size:15px;padding:9px 12px}
+    td.c-ctl input[type=date]{-webkit-appearance:none;appearance:none;box-sizing:border-box;max-width:100%}
+    td.c-ctl input[type=date]::-webkit-date-and-time-value{text-align:left}
     .domainbox .domain-in,.domainbox .domst{min-height:44px;font-size:16px}
     /* note: textarea espandibile */
     td.notes{display:block;padding:8px 0 4px}
